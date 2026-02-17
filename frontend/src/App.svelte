@@ -3,6 +3,7 @@
   import TransferQueue from "./components/TransferQueue.svelte";
   import CurrentFileProgress from "./components/CurrentFileProgress.svelte";
   import OverallProgress from "./components/OverallProgress.svelte";
+  import TransferGraph from "./components/TransferGraph.svelte";
   import FileList from "./components/FileList.svelte";
   import SettingsDialog from "./components/SettingsDialog.svelte";
   import "./styles/main.css";
@@ -161,6 +162,7 @@
         totalFiles={activeFiles.length}
       />
       <OverallProgress transfer={activeTransfer} />
+      <TransferGraph transfer={activeTransfer} {currentSpeed} />
 
       <!-- Action Buttons Bar -->
       <div class="action-bar">
