@@ -4,6 +4,7 @@
   import CurrentFileProgress from "./components/CurrentFileProgress.svelte";
   import OverallProgress from "./components/OverallProgress.svelte";
   import FileList from "./components/FileList.svelte";
+  import SettingsDialog from "./components/SettingsDialog.svelte";
   import "./styles/main.css";
 
   // Import Wails runtime
@@ -22,6 +23,7 @@
   let activeTransfer: any = null;
   let currentFile: any = null;
   let activeFiles: any[] = []; // Files for the currently selected transfer
+  let showSettings = false;
 
   // Overall Stats
   let currentSpeed = 0;
@@ -130,11 +132,17 @@
       {activeTransfer}
       on:select={handleTransferSelect}
     />
-    <!-- Debug Add Button -->
-    <div style="padding: 10px;">
+    <!-- Debug Add Button & Settings -->
+    <div style="padding: 10px; display: flex; gap: 5px;">
       <button
         on:click={addMockTransfer}
-        style="width: 100%; padding: 5px; opacity: 0.5;">+ Test Transfer</button
+        style="flex: 1; padding: 5px; opacity: 0.5;">+ Test</button
+      >
+
+      <button
+        on:click={() => (showSettings = true)}
+        style="padding: 5px 10px; opacity: 0.5;"
+        title="Settings">⚙</button
       >
     </div>
   </aside>
@@ -175,6 +183,9 @@
       <FileList files={activeFiles} />
     </div>
   </section>
+
+  <!-- Settings Dialog -->
+  <SettingsDialog bind:show={showSettings} />
 </main>
 
 <style>
@@ -191,6 +202,9 @@
     width: 250px;
     flex-shrink: 0;
     z-index: 10;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
   }
 
   .main-content {

@@ -47,7 +47,9 @@
     // Helper to format hash for display (shortened)
     function formatHash(hash: string): string {
         if (!hash) return "....";
-        if (hash.length > 8) return hash.substring(0, 8); //TODO: We want to show the first 4 and last 4 characters of the hash with a : in between
+        if (hash.length > 8) {
+            return `${hash.substring(0, 4)}:${hash.substring(hash.length - 4)}`;
+        }
         return hash;
     }
 </script>

@@ -11,12 +11,14 @@ import (
 type App struct {
 	ctx             context.Context
 	transferService *services.TransferService
+	settingsService *services.SettingsService
 }
 
 // NewApp creates a new App application struct
 func NewApp() *App {
 	return &App{
 		transferService: services.NewTransferService(),
+		settingsService: services.NewSettingsService(),
 	}
 }
 
@@ -57,4 +59,14 @@ func (a *App) ResumeTransfer() {
 // CancelTransfer cancels the current transfer
 func (a *App) CancelTransfer() {
 	a.transferService.Cancel()
+}
+
+// GetSettings returns the current application settings
+func (a *App) GetSettings() *models.Settings {
+	return a.settingsService.Get()
+}
+
+// SaveSettings saves the application settings
+func (a *App) SaveSettings(settings *models.Settings) error {
+	return a.settingsService.Save(settings)
 }

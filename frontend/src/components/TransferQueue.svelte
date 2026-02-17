@@ -69,7 +69,8 @@
         border-right: 1px solid var(--border-color);
         display: flex;
         flex-direction: column;
-        height: 100%;
+        flex: 1; /* Fill available space */
+        min-height: 0; /* Allow scrolling */
     }
 
     .section-title {
