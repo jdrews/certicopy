@@ -17,6 +17,8 @@
     PauseTransfer,
     ResumeTransfer,
     CancelTransfer,
+    SelectSource,
+    SelectDestination,
   } from "../wailsjs/go/main/App";
 
   // State
@@ -112,15 +114,19 @@
 
   // --- Actions ---
 
-  async function addMockTransfer() {
-    // Temporary debug function to test adding transfers
+  async function addNewTransfer() {
     try {
-      // Add a transfer of some dummy files if they exist, or just valid paths
-      // For linux:
-      await AddTransferToQueue(["/usr/share/doc"], "/tmp/certicopy_test");
+      // Select source directory (backend now returns [path])
+      const sources = await SelectSource();
+      if (!sources || sources.length === 0) return;
+
+      const dest = await SelectDestination();
+      if (!dest) return;
+
+      await AddTransferToQueue(sources, dest);
       StartQueue();
     } catch (e) {
-      console.error(e);
+      console.error("Failed to add transfer:", e);
     }
   }
 </script>
@@ -136,8 +142,9 @@
     <!-- Debug Add Button & Settings -->
     <div style="padding: 10px; display: flex; gap: 5px;">
       <button
-        on:click={addMockTransfer}
-        style="flex: 1; padding: 5px; opacity: 0.5;">+ Test</button
+        on:click={addNewTransfer}
+        style="flex: 1; padding: 5px; opacity: 0.8; font-weight: bold;"
+        >+ New Transfer</button
       >
 
       <button

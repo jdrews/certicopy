@@ -5,6 +5,7 @@ import (
 
 	"github.com/jdrews/certicopy/internal/models"
 	"github.com/jdrews/certicopy/internal/services"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct
@@ -59,6 +60,27 @@ func (a *App) ResumeTransfer() {
 // CancelTransfer cancels the current transfer
 func (a *App) CancelTransfer() {
 	a.transferService.Cancel()
+}
+
+// SelectSource opens a dialog to select a source directory
+func (a *App) SelectSource() ([]string, error) {
+	selection, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select Source Directory",
+	})
+	if err != nil {
+		return nil, err
+	}
+	if selection == "" {
+		return nil, nil // API expects empty/nil if cancelled
+	}
+	return []string{selection}, nil
+}
+
+// SelectDestination opens a dialog to select destination directory
+func (a *App) SelectDestination() (string, error) {
+	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Select Destination Directory",
+	})
 }
 
 // GetSettings returns the current application settings

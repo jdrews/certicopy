@@ -9,6 +9,9 @@ build/bin
 # Test binary, built with `go test -c`
 *.test
 
+# Test files
+testfiles
+
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
