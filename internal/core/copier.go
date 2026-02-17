@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/afero"
@@ -55,6 +56,9 @@ func (c *Copier) Copy(src string, dst string, opts CopyOptions) error {
 
 // CopyWithProgress performs a file copy and streams progress updates
 func (c *Copier) CopyWithProgress(src string, dst string, opts CopyOptions, progressChan chan<- Progress) error {
+	defer close(progressChan)
+	fmt.Printf("Copier: Start copying %s to %s\n", src, dst)
+
 	// ## Open source file
 	srcFile, err := c.srcFs.Open(src)
 	if err != nil {
@@ -66,6 +70,12 @@ func (c *Copier) CopyWithProgress(src string, dst string, opts CopyOptions, prog
 	srcInfo, err := srcFile.Stat()
 	if err != nil {
 		return fmt.Errorf("failed to stat source: %w", err)
+	}
+
+	// ## Create destination directory if it doesn't exist
+	destDir := filepath.Dir(dst)
+	if err := c.dstFs.MkdirAll(destDir, 0755); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
 	// ## Check destination

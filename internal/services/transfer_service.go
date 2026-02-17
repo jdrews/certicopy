@@ -42,11 +42,14 @@ func (s *TransferService) SetContext(ctx context.Context) {
 
 // AddTransfer adds a new transfer job to the queue
 func (s *TransferService) AddTransfer(sources []string, dest string) (string, error) {
+	fmt.Printf("AddTransfer called with sources: %v, dest: %s\n", sources, dest)
 	// Scan sources
 	files, _, totalSize, err := s.scanner.Scan(sources, dest)
 	if err != nil {
+		fmt.Printf("Scanner.Scan failed: %v\n", err)
 		return "", err
 	}
+	fmt.Printf("Scanner found %d files, total size: %d\n", len(files), totalSize)
 
 	job := &models.TransferJob{
 		ID:          fmt.Sprintf("job_%d", time.Now().UnixNano()),
@@ -61,12 +64,15 @@ func (s *TransferService) AddTransfer(sources []string, dest string) (string, er
 
 	s.queue.Add(job)
 	s.emitQueueUpdate()
+	fmt.Println("Job added to queue and update emitted")
 	return job.ID, nil
 }
 
 // StartQueue starts processing the queue
 func (s *TransferService) StartQueue() {
+	fmt.Println("StartQueue called")
 	if s.running {
+		fmt.Println("StartQueue: already running")
 		return
 	}
 	s.running = true
@@ -74,14 +80,20 @@ func (s *TransferService) StartQueue() {
 }
 
 func (s *TransferService) processQueue() {
-	defer func() { s.running = false }()
+	fmt.Println("processQueue started")
+	defer func() {
+		fmt.Println("processQueue stopping")
+		s.running = false
+	}()
 
 	for {
 		// Get next pending job (simple Peek for now, assuming only one consumer)
 		job := s.queue.Peek()
 		if job == nil {
+			fmt.Println("processQueue: Queue empty")
 			return // Queue empty
 		}
+		fmt.Printf("processQueue: Processing job %s with %d files\n", job.ID, len(job.Files))
 
 		// Update job status
 		job.Status = models.StatusInProgress
@@ -94,6 +106,7 @@ func (s *TransferService) processQueue() {
 		// Process files
 		for i := range job.Files {
 			file := job.Files[i] // Pointer to file in slice
+			fmt.Printf("processQueue: Checking file %s (Status: %s)\n", file.Name, file.Status)
 
 			// Check for cancellation
 			select {
@@ -127,9 +140,11 @@ func (s *TransferService) processQueue() {
 			// Run copy in goroutine to process progress updates
 			errChan := make(chan error)
 			go func() {
+				fmt.Printf("Starting copy text for file: %s\n", file.Name)
 				defer close(errChan)
 				// copier closes progressChan
 				errChan <- s.copier.CopyWithProgress(file.SourcePath, file.DestPath, opts, progressChan)
+				fmt.Printf("Copy goroutine finished for file: %s\n", file.Name)
 			}()
 
 			// Listen for progress
@@ -137,6 +152,7 @@ func (s *TransferService) processQueue() {
 			// var initialBytesCopied = job.BytesCopied // Snapshot at start of file // Not used in this version
 			var lastProgress core.Progress // To capture the final progress value
 
+			fmt.Println("Waiting for progress channel...")
 			for p := range progressChan {
 				// Update file progress
 				file.BytesCopied = p.BytesCopied
@@ -151,12 +167,15 @@ func (s *TransferService) processQueue() {
 					lastUpdate = time.Now()
 				}
 			}
+			fmt.Println("Progress channel closed")
 
 			err := <-errChan
 			if err != nil {
+				fmt.Printf("Copy failed for %s: %v\n", file.Name, err)
 				file.Status = models.StatusFailed
 				file.ErrorMessage = err.Error()
 			} else {
+				fmt.Printf("Copy success for %s\n", file.Name)
 				file.Status = models.StatusSuccess
 				// We need the hash from the copier progress (last value)
 				// Ideally CopyWithProgress returns it or we capture it from channel

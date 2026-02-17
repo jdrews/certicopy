@@ -8,9 +8,12 @@
     export let transfer: any = null;
 
     $: percentage =
-        transfer && transfer.totalSize > 0
-            ? (transfer.bytesCopied / transfer.totalSize) * 100
+        transfer && transfer.totalBytes > 0
+            ? (transfer.bytesCopied / transfer.totalBytes) * 100
             : 0;
+
+    // Prevent NaN
+    $: if (isNaN(percentage)) percentage = 0;
 
     // Mock data for speed/eta if not present in transfer object yet
     $: speed = transfer?.speed || 0;

@@ -124,7 +124,9 @@
       if (!dest) return;
 
       await AddTransferToQueue(sources, dest);
+      console.log("Transfer added to queue");
       StartQueue();
+      console.log("StartQueue called");
     } catch (e) {
       console.error("Failed to add transfer:", e);
     }

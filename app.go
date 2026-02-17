@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jdrews/certicopy/internal/models"
 	"github.com/jdrews/certicopy/internal/services"
@@ -68,19 +69,32 @@ func (a *App) SelectSource() ([]string, error) {
 		Title: "Select Source Directory",
 	})
 	if err != nil {
+		fmt.Printf("SelectSource error: %v\n", err)
 		return nil, err
 	}
 	if selection == "" {
+		fmt.Println("SelectSource cancelled")
 		return nil, nil // API expects empty/nil if cancelled
 	}
+	fmt.Printf("SelectSource selected: %s\n", selection)
 	return []string{selection}, nil
 }
 
 // SelectDestination opens a dialog to select destination directory
 func (a *App) SelectDestination() (string, error) {
-	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+	selection, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Select Destination Directory",
 	})
+	if err != nil {
+		fmt.Printf("SelectDestination error: %v\n", err)
+		return "", err
+	}
+	if selection == "" {
+		fmt.Println("SelectDestination cancelled")
+		return "", nil // API expects empty string if cancelled
+	}
+	fmt.Printf("SelectDestination selected: %s\n", selection)
+	return selection, nil
 }
 
 // GetSettings returns the current application settings
