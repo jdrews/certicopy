@@ -124,6 +124,7 @@ func (s *TransferService) processQueue() {
 
 			file.Status = models.StatusInProgress
 			s.emitFileUpdate(file)
+			s.emitQueueUpdate() // Update queue so UI shows in_progress state
 
 			// Perform copy configuration
 			opts := core.CopyOptions{
@@ -140,34 +141,35 @@ func (s *TransferService) processQueue() {
 			// Run copy in goroutine to process progress updates
 			errChan := make(chan error)
 			go func() {
-				fmt.Printf("Starting copy text for file: %s\n", file.Name)
+				fmt.Printf("Starting copy for file: %s\n", file.Name)
 				defer close(errChan)
-				// copier closes progressChan
 				errChan <- s.copier.CopyWithProgress(file.SourcePath, file.DestPath, opts, progressChan)
 				fmt.Printf("Copy goroutine finished for file: %s\n", file.Name)
 			}()
 
 			// Listen for progress
 			var lastUpdate time.Time
-			// var initialBytesCopied = job.BytesCopied // Snapshot at start of file // Not used in this version
-			var lastProgress core.Progress // To capture the final progress value
+			var lastProgress core.Progress
 
-			fmt.Println("Waiting for progress channel...")
 			for p := range progressChan {
-				// Update file progress
 				file.BytesCopied = p.BytesCopied
-				lastProgress = p // Capture the last progress update
+				lastProgress = p
 
-				// Let's rely on emitting FILE progress and let UI update job bar?
-				// Or emit job progress event with aggregated stats.
-				// TODO: Decide on progress reporting strategy
+				// Throttle progress emissions to every 200ms
+				if time.Since(lastUpdate) > 200*time.Millisecond {
+					// Update job-level bytesCopied for overall progress
+					var totalCopied int64
+					for _, f := range job.Files {
+						totalCopied += f.BytesCopied
+					}
+					job.BytesCopied = totalCopied
 
-				if time.Since(lastUpdate) > 500*time.Millisecond {
-					s.emitProgress(job, p) // Emits current file progress
+					s.emitProgress(job, p)
+					s.emitFileUpdate(file)
+					s.emitQueueUpdate()
 					lastUpdate = time.Now()
 				}
 			}
-			fmt.Println("Progress channel closed")
 
 			err := <-errChan
 			if err != nil {
@@ -177,20 +179,24 @@ func (s *TransferService) processQueue() {
 			} else {
 				fmt.Printf("Copy success for %s\n", file.Name)
 				file.Status = models.StatusSuccess
-				// We need the hash from the copier progress (last value)
-				// Ideally CopyWithProgress returns it or we capture it from channel
-				// The channel is closed, so we might miss the very last value if loop exits?
-				// No, range loop consumes all.
-				// But we didn't save the progress value outside the loop.
-				// Let's modify loop above to capture last p.
+				file.BytesCopied = file.Size // Ensure 100%
 				file.SourceHash = lastProgress.SourceHash
 				file.DestHash = lastProgress.DestHash
 			}
+
+			// Update job-level stats after each file
+			var totalCopied int64
+			for _, f := range job.Files {
+				totalCopied += f.BytesCopied
+			}
+			job.BytesCopied = totalCopied
+
 			s.emitFileUpdate(file)
+			s.emitQueueUpdate() // Critical: emit queue update so UI refreshes all file statuses
 		}
 
-		job.Status = models.StatusSuccess // Need to check if any failed
-		// TODO: Check if any files failed, if so, set job.Status = models.StatusFailed
+		// Determine final job status
+		job.Status = models.StatusSuccess
 		for _, file := range job.Files {
 			if file.Status == models.StatusFailed {
 				job.Status = models.StatusFailed
@@ -200,19 +206,19 @@ func (s *TransferService) processQueue() {
 
 		job.CompletedAt = time.Now()
 
-		// Remove from queue (Pop) after completion?
-		// Or keep it as "completed" history?
-		// For now, let's Pop it so queue only shows pending/active.
-		s.queue.Pop()
-
+		// Keep completed job in queue so sidebar shows it as done
+		// Don't Pop - let user clear it manually
 		s.emitQueueUpdate()
 	}
 }
 
 func (s *TransferService) emitQueueUpdate() {
-	if s.ctx != nil {
-		runtime.EventsEmit(s.ctx, "queue:updated", s.queue.GetAll())
+	if s.ctx == nil {
+		fmt.Println("emitQueueUpdate: context is nil, cannot emit")
+		return
 	}
+	fmt.Println("emitQueueUpdate: emitting queue:updated")
+	runtime.EventsEmit(s.ctx, "queue:updated", s.queue.GetAll())
 }
 
 func (s *TransferService) emitFileUpdate(file *models.FileInfo) {

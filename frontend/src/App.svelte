@@ -38,13 +38,21 @@
 
     // Event Listeners
     EventsOn("queue:updated", (queue: any[]) => {
+      console.log("App: queue:updated event received", queue);
       transferQueue = queue;
+
       // If we have an active transfer, update it from the new queue
       if (activeTransfer) {
+        console.log("App: Updating active transfer", activeTransfer.id);
         const updated = queue.find((j) => j.id === activeTransfer.id);
         if (updated) {
           activeTransfer = updated;
-          activeFiles = updated.Files || [];
+          activeFiles = updated.files || []; // JSON tag is 'files'
+          console.log(
+            "App: Updated active transfer files count:",
+            activeFiles.length,
+          );
+
           // Also update current file if it belongs to this transfer
           if (
             currentFile &&
@@ -53,22 +61,36 @@
             currentFile = null;
           }
         }
-      } else if (queue.length > 0) {
-        // Auto-select first if none selected
+      }
+
+      // Auto-select first if none selected
+      if (!activeTransfer && queue.length > 0) {
+        console.log("App: Auto-selecting first transfer", queue[0]);
         handleTransferSelect({ detail: queue[0] });
       }
     });
 
     EventsOn("file:updated", (file: any) => {
+      console.log(
+        "App: file:updated event received",
+        file.SourcePath,
+        file.Status,
+      );
       // Update file in our local list if it matches
       if (activeFiles) {
         const idx = activeFiles.findIndex(
           (f) => f.SourcePath === file.SourcePath,
         );
         if (idx !== -1) {
+          console.log("App: Updating file in activeFiles at index", idx);
           activeFiles[idx] = file;
           // Trigger reactivity
           activeFiles = [...activeFiles];
+        } else {
+          console.warn(
+            "App: Received update for file not in activeFiles",
+            file.SourcePath,
+          );
         }
       }
 

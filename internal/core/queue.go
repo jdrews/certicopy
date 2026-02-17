@@ -26,14 +26,16 @@ func (q *TransferQueue) Add(job *models.TransferJob) {
 	q.jobs = append(q.jobs, job)
 }
 
-// Peek returns the first job in the queue without removing it, or nil if empty
+// Peek returns the first pending/in-progress job in the queue, or nil if none
 func (q *TransferQueue) Peek() *models.TransferJob {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
-	if len(q.jobs) == 0 {
-		return nil
+	for _, job := range q.jobs {
+		if job.Status == models.StatusPending || job.Status == models.StatusInProgress {
+			return job
+		}
 	}
-	return q.jobs[0]
+	return nil
 }
 
 // Pop removes and returns the first job in the queue, or nil if empty
