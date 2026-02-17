@@ -39,9 +39,22 @@ func (a *App) StartQueue() {
 
 // GetQueue returns the current transfer queue
 func (a *App) GetQueue() []*models.TransferJob {
-	// Note: We need to expose TransferJob type in a way Wails can generate TS bindings.
-	// Since TransferJob is in internal/models, Wails might not pick it up if not imported?
-	// Actually Wails v2 generates models automatically for returned types.
-	// But we need to make sure the type is exported.
 	return a.transferService.GetQueue()
+}
+
+// PauseTransfer pauses the current transfer
+func (a *App) PauseTransfer() {
+	// TODO: Implement pause logic
+	a.transferService.Pause()
+}
+
+// ResumeTransfer resumes the current transfer
+func (a *App) ResumeTransfer() {
+	// TODO: Implement resume logic
+	a.transferService.Resume()
+}
+
+// CancelTransfer cancels the current transfer
+func (a *App) CancelTransfer() {
+	a.transferService.Cancel()
 }

@@ -211,3 +211,17 @@ func (s *TransferService) emitProgress(job *models.TransferJob, p core.Progress)
 func (s *TransferService) GetQueue() []*models.TransferJob {
 	return s.queue.GetAll()
 }
+
+func (s *TransferService) Pause() {
+	// TODO: Implement pause
+}
+
+func (s *TransferService) Resume() {
+	// TODO: Implement resume
+}
+
+func (s *TransferService) Cancel() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+}
