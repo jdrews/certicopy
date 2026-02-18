@@ -22,11 +22,11 @@ type CopyOptions struct {
 
 // Progress update struct
 type Progress struct {
-	BytesCopied int64
-	TotalBytes  int64
-	Speed       float64 // bytes per second
-	SourceHash  string
-	DestHash    string
+	BytesCopied int64   `json:"bytesCopied"`
+	TotalBytes  int64   `json:"totalBytes"`
+	Speed       float64 `json:"speed"` // bytes per second
+	SourceHash  string  `json:"sourceHash"`
+	DestHash    string  `json:"destHash"`
 }
 
 // Copier handles file copy operations
@@ -139,9 +139,25 @@ func (c *Copier) CopyWithProgress(src string, dst string, opts CopyOptions, prog
 		return fmt.Errorf("copy failed: %w", err)
 	}
 
-	// Calculate hash immediately after copy
+	// Calculate source hash immediately after copy
 	if hasher != nil {
 		hashResult = fmt.Sprintf("%x", hasher.Sum(nil))
+	}
+
+	// ## Calculate destination hash for verification
+	var destHashResult string
+	if opts.CalculateHash {
+		dstHasher, err := NewHasher(opts.HashAlgorithm)
+		if err == nil {
+			// Re-open destination file to hash it
+			dstReadFile, err := c.dstFs.Open(dst)
+			if err == nil {
+				defer dstReadFile.Close()
+				if _, err := io.Copy(dstHasher, dstReadFile); err == nil {
+					destHashResult = fmt.Sprintf("%x", dstHasher.Sum(nil))
+				}
+			}
+		}
 	}
 
 	// ## Send final progress
@@ -150,7 +166,8 @@ func (c *Copier) CopyWithProgress(src string, dst string, opts CopyOptions, prog
 			BytesCopied: written,
 			TotalBytes:  totalBytes,
 			Speed:       float64(written) / time.Since(startTime).Seconds(),
-			SourceHash:  hashResult, // This will be the source hash calculated during copy
+			SourceHash:  hashResult,
+			DestHash:    destHashResult,
 		}
 	}
 

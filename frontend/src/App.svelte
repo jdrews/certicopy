@@ -73,13 +73,13 @@
     EventsOn("file:updated", (file: any) => {
       console.log(
         "App: file:updated event received",
-        file.SourcePath,
-        file.Status,
+        file.sourcePath,
+        file.status,
       );
       // Update file in our local list if it matches
       if (activeFiles) {
         const idx = activeFiles.findIndex(
-          (f) => f.SourcePath === file.SourcePath,
+          (f) => f.sourcePath === file.sourcePath,
         );
         if (idx !== -1) {
           console.log("App: Updating file in activeFiles at index", idx);
@@ -89,17 +89,17 @@
         } else {
           console.warn(
             "App: Received update for file not in activeFiles",
-            file.SourcePath,
+            file.sourcePath,
           );
         }
       }
 
-      if (file.Status === "in_progress") {
+      if (file.status === "in_progress") {
         currentFile = file;
       } else if (
         currentFile &&
-        currentFile.SourcePath === file.SourcePath &&
-        file.Status !== "in_progress"
+        currentFile.sourcePath === file.sourcePath &&
+        file.status !== "in_progress"
       ) {
         currentFile = null; // Clear if it finished
       }
@@ -108,10 +108,10 @@
     EventsOn("transfer:progress", (progress: any) => {
       // Update speed/eta if we have an active transfer
       if (activeTransfer && activeTransfer.status === "in_progress") {
-        currentSpeed = progress.CurrentSpeed;
+        currentSpeed = progress.speed || 0;
         if (currentSpeed > 0) {
           estimatedTime =
-            (activeTransfer.TotalBytes - activeTransfer.BytesCopied) /
+            (activeTransfer.totalBytes - activeTransfer.bytesCopied) /
             currentSpeed;
         }
       }
@@ -131,7 +131,7 @@
 
   function handleTransferSelect(event: CustomEvent | { detail: any }) {
     activeTransfer = event.detail;
-    activeFiles = activeTransfer ? activeTransfer.Files || [] : [];
+    activeFiles = activeTransfer ? activeTransfer.files || [] : [];
   }
 
   // --- Actions ---
@@ -187,12 +187,12 @@
         {currentFile}
         currentFileIndex={currentFile && activeFiles
           ? activeFiles.findIndex(
-              (f) => f.SourcePath === currentFile.SourcePath,
+              (f) => f.sourcePath === currentFile.sourcePath,
             ) + 1
           : 0}
         totalFiles={activeFiles.length}
       />
-      <OverallProgress transfer={activeTransfer} />
+      <OverallProgress transfer={activeTransfer} {currentSpeed} />
       <TransferGraph transfer={activeTransfer} {currentSpeed} />
 
       <!-- Action Buttons Bar -->

@@ -41,15 +41,17 @@
                     </div>
                     <div class="transfer-info">
                         <span class="size"
-                            >{formatBytes(transfer.totalSize)}</span
+                            >{formatBytes(transfer.totalBytes)}</span
                         >
                         {#if transfer.status === "in_progress"}
                             • <span class="percent"
-                                >{Math.round(
-                                    (transfer.bytesCopied /
-                                        transfer.totalSize) *
-                                        100,
-                                )}%</span
+                                >{transfer.totalBytes > 0
+                                    ? Math.round(
+                                          (transfer.bytesCopied /
+                                              transfer.totalBytes) *
+                                              100,
+                                      )
+                                    : 0}%</span
                             >
                         {/if}
                     </div>

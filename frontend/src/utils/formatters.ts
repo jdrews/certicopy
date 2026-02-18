@@ -5,6 +5,7 @@
  * @returns Formatted string (e.g. "1.5 MB")
  */
 export function formatBytes(bytes: number, decimals: number = 2): string {
+    if (!bytes || !isFinite(bytes) || bytes < 0) return '0 Bytes';
     if (bytes === 0) return '0 Bytes';
 
     const k = 1024;

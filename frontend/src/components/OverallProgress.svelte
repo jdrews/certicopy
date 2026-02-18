@@ -6,6 +6,7 @@
     } from "../utils/formatters";
 
     export let transfer: any = null;
+    export let currentSpeed: number = 0;
 
     $: percentage =
         transfer && transfer.totalBytes > 0
@@ -15,27 +16,28 @@
     // Prevent NaN
     $: if (isNaN(percentage)) percentage = 0;
 
-    // Mock data for speed/eta if not present in transfer object yet
-    $: speed = transfer?.speed || 0;
-    $: eta = transfer?.eta || 0;
+    $: eta =
+        currentSpeed > 0 && transfer
+            ? (transfer.totalBytes - transfer.bytesCopied) / currentSpeed
+            : 0;
 </script>
 
 <div class="progress-panel">
     <div class="info-row">
         <div class="label-col">
-            <div class="path" title={transfer?.destPath || ""}>
-                {transfer?.destPath || "No destination"}
+            <div class="path" title={transfer?.destination || ""}>
+                {transfer?.destination || "No destination"}
             </div>
         </div>
         <div class="stats-col">
             {#if transfer}
-                <span class="speed">{formatSpeed(speed)}</span>
+                <span class="speed">{formatSpeed(currentSpeed)}</span>
                 {#if eta > 0}
                     <span class="eta">- {formatDuration(eta)}</span>
                 {/if}
                 <span class="size-progress">
                     {formatBytes(transfer.bytesCopied)} / {formatBytes(
-                        transfer.totalSize,
+                        transfer.totalBytes,
                     )}
                 </span>
                 <span class="percentage">{percentage.toFixed(1)}%</span>
