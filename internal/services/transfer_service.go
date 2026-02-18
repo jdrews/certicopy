@@ -242,7 +242,46 @@ func (s *TransferService) Pause() {
 }
 
 func (s *TransferService) Resume() {
-	// TODO: Implement resume
+	fmt.Println("Resume called")
+	// Find jobs that were stopped/cancelled and have remaining files to copy
+	jobs := s.queue.GetAll()
+	resumed := false
+	for _, job := range jobs {
+		// Only resume jobs that are not currently running and have incomplete files
+		if job.Status == models.StatusFailed || job.Status == models.StatusPending {
+			hasRemaining := false
+			for _, file := range job.Files {
+				if file.Status != models.StatusSuccess && file.Status != models.StatusSkipped {
+					hasRemaining = true
+					break
+				}
+			}
+			if !hasRemaining {
+				continue
+			}
+
+			// Reset job to pending so processQueue will pick it up
+			job.Status = models.StatusPending
+			job.Error = ""
+
+			// Reset any interrupted (in_progress) or failed files back to pending
+			// so they get re-copied. Success/skipped files are preserved.
+			for _, file := range job.Files {
+				if file.Status == models.StatusInProgress || file.Status == models.StatusFailed {
+					file.Status = models.StatusPending
+					file.ErrorMessage = ""
+					file.BytesCopied = 0
+				}
+			}
+
+			resumed = true
+		}
+	}
+
+	if resumed {
+		s.emitQueueUpdate()
+		s.StartQueue()
+	}
 }
 
 func (s *TransferService) Cancel() {

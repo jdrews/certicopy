@@ -12,13 +12,13 @@
   import { EventsOn } from "../wailsjs/runtime/runtime";
   import {
     AddTransferToQueue,
-    StartQueue,
+    CancelTransfer,
     GetQueue,
     PauseTransfer,
     ResumeTransfer,
-    CancelTransfer,
-    SelectSource,
     SelectDestination,
+    SelectSource,
+    StartQueue,
   } from "../wailsjs/go/main/App";
 
   // State
@@ -198,15 +198,30 @@
       <!-- Action Buttons Bar -->
       <div class="action-bar">
         <div class="actions-left">
-          <button class="btn btn-action" title="Pause" on:click={PauseTransfer}
-            >Pause</button
-          >
-          <button class="btn btn-action" title="Skip Current File">Skip</button>
-          <button
-            class="btn btn-action btn-danger"
-            title="Stop Transfer"
-            on:click={CancelTransfer}>Stop</button
-          >
+          {#if activeTransfer?.status === "in_progress"}
+            <button
+              class="btn btn-action"
+              title="Pause"
+              on:click={PauseTransfer}>Pause</button
+            >
+            <button class="btn btn-action" title="Skip Current File"
+              >Skip</button
+            >
+          {/if}
+          {#if activeTransfer?.status === "in_progress" || activeTransfer?.status === "pending"}
+            <button
+              class="btn btn-action btn-danger"
+              title="Stop Transfer"
+              on:click={CancelTransfer}>Stop</button
+            >
+          {/if}
+          {#if activeTransfer?.status === "failed" || (activeTransfer?.status === "pending" && !activeTransfer?.startedAt)}
+            <button
+              class="btn btn-action btn-success"
+              title="Resume Transfer"
+              on:click={ResumeTransfer}>Resume</button
+            >
+          {/if}
         </div>
       </div>
     </div>
@@ -285,6 +300,12 @@
     background-color: #a00;
     color: white;
     border-color: #a00;
+  }
+
+  .btn-success:hover {
+    background-color: #080;
+    color: white;
+    border-color: #080;
   }
 
   .list-area {
