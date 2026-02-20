@@ -21,16 +21,25 @@
     StartQueue,
   } from "../wailsjs/go/main/App";
 
+  import {
+    transferMetricsStore,
+    setTransferMetrics,
+    updateGraphData,
+  } from "./utils/stores";
+
   // State
   let transferQueue: any[] = [];
   let activeTransfer: any = null;
-  let currentFile: any = null;
   let activeFiles: any[] = []; // Files for the currently selected transfer
   let showSettings = false;
 
-  // Overall Stats
-  let currentSpeed = 0;
-  let estimatedTime = 0;
+  // Computed metrics based on active transfer
+  $: viewMetrics = activeTransfer
+    ? $transferMetricsStore.get(activeTransfer.id)
+    : null;
+  $: viewFile = viewMetrics?.currentFile || null;
+  $: viewSpeed =
+    activeTransfer?.status === "in_progress" ? viewMetrics?.lastSpeed || 0 : 0;
 
   onMount(async () => {
     // Initial Load
@@ -43,77 +52,55 @@
 
       // If we have an active transfer, update it from the new queue
       if (activeTransfer) {
-        console.log("App: Updating active transfer", activeTransfer.id);
         const updated = queue.find((j) => j.id === activeTransfer.id);
         if (updated) {
           activeTransfer = updated;
-          activeFiles = updated.files || []; // JSON tag is 'files'
-          console.log(
-            "App: Updated active transfer files count:",
-            activeFiles.length,
-          );
-
-          // Also update current file if it belongs to this transfer
-          if (
-            currentFile &&
-            !activeFiles.find((f) => f.SourcePath === currentFile.SourcePath)
-          ) {
-            currentFile = null;
-          }
+          activeFiles = updated.files || [];
         }
       }
 
       // Auto-select first if none selected
       if (!activeTransfer && queue.length > 0) {
-        console.log("App: Auto-selecting first transfer", queue[0]);
         handleTransferSelect({ detail: queue[0] });
       }
     });
 
     EventsOn("file:updated", (file: any) => {
-      console.log(
-        "App: file:updated event received",
-        file.sourcePath,
-        file.status,
+      // Find which transfer this file belongs to
+      const job = transferQueue.find((j) =>
+        j.files?.some((f) => f.sourcePath === file.sourcePath),
       );
-      // Update file in our local list if it matches
+      if (job) {
+        if (file.status === "in_progress") {
+          setTransferMetrics(job.id, { currentFile: file });
+        } else {
+          // Access store safely
+          const currentMetrics = $transferMetricsStore.get(job.id);
+          if (currentMetrics?.currentFile?.sourcePath === file.sourcePath) {
+            setTransferMetrics(job.id, { currentFile: null });
+          }
+        }
+      }
+
+      // Update file in activeFiles if it belongs to current view
       if (activeFiles) {
         const idx = activeFiles.findIndex(
           (f) => f.sourcePath === file.sourcePath,
         );
         if (idx !== -1) {
-          console.log("App: Updating file in activeFiles at index", idx);
           activeFiles[idx] = file;
-          // Trigger reactivity
           activeFiles = [...activeFiles];
-        } else {
-          console.warn(
-            "App: Received update for file not in activeFiles",
-            file.sourcePath,
-          );
         }
-      }
-
-      if (file.status === "in_progress") {
-        currentFile = file;
-      } else if (
-        currentFile &&
-        currentFile.sourcePath === file.sourcePath &&
-        file.status !== "in_progress"
-      ) {
-        currentFile = null; // Clear if it finished
       }
     });
 
     EventsOn("transfer:progress", (progress: any) => {
-      // Update speed/eta if we have an active transfer
-      if (activeTransfer && activeTransfer.status === "in_progress") {
-        currentSpeed = progress.speed || 0;
-        if (currentSpeed > 0) {
-          estimatedTime =
-            (activeTransfer.totalBytes - activeTransfer.bytesCopied) /
-            currentSpeed;
-        }
+      // Progress usually comes for the active job
+      const jobId =
+        progress.jobId ||
+        transferQueue.find((j) => j.status === "in_progress")?.id;
+      if (jobId) {
+        updateGraphData(jobId, progress.bytesCopied || 0, progress.speed || 0);
       }
     });
   });
@@ -184,17 +171,16 @@
     <!-- Top Progress Bars Area -->
     <div class="progress-area">
       <CurrentFileProgress
-        {currentFile}
-        currentFileIndex={currentFile && activeFiles
-          ? activeFiles.findIndex(
-              (f) => f.sourcePath === currentFile.sourcePath,
-            ) + 1
+        currentFile={viewFile}
+        currentFileIndex={viewFile && activeFiles
+          ? activeFiles.findIndex((f) => f.sourcePath === viewFile.sourcePath) +
+            1
           : 0}
         totalFiles={activeFiles.length}
         transferStatus={activeTransfer?.status || ""}
       />
-      <OverallProgress transfer={activeTransfer} {currentSpeed} />
-      <TransferGraph transfer={activeTransfer} {currentSpeed} />
+      <OverallProgress transfer={activeTransfer} currentSpeed={viewSpeed} />
+      <TransferGraph transfer={activeTransfer} currentSpeed={viewSpeed} />
 
       <!-- Action Buttons Bar -->
       <div class="action-bar">

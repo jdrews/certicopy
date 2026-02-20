@@ -2,7 +2,7 @@
     import { formatBytes } from "../utils/formatters";
 
     import {
-        graphDataStore,
+        transferMetricsStore,
         updateGraphData,
         type DataPoint,
     } from "../utils/stores";
@@ -16,24 +16,15 @@
     // Update view when transfer changes or store updates
     $: {
         if (transfer?.id) {
-            const saved = $graphDataStore.get(transfer.id);
-            if (saved) {
-                dataPoints = saved.dataPoints;
-                maxSpeed = saved.maxSpeed;
+            const metrics = $transferMetricsStore.get(transfer.id);
+            if (metrics) {
+                dataPoints = metrics.dataPoints;
+                maxSpeed = metrics.maxSpeed;
             } else {
                 dataPoints = [];
                 maxSpeed = 0;
             }
         }
-    }
-
-    // Update store when speed updates for active transfer
-    $: if (
-        currentSpeed > 0 &&
-        transfer?.totalBytes > 0 &&
-        transfer?.status === "in_progress"
-    ) {
-        updateGraphData(transfer.id, transfer.bytesCopied || 0, currentSpeed);
     }
 
     // Generate SVG path with bytes-based x-axis
@@ -75,7 +66,8 @@
 
     // Check if transfer is complete with data
     $: isCompleteWithData =
-        transfer?.status === "completed" && dataPoints.length > 2;
+        (transfer?.status === "success" || transfer?.status === "completed") &&
+        dataPoints.length > 2;
 </script>
 
 <div class="graph-container">

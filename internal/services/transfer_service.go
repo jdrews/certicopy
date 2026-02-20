@@ -229,7 +229,12 @@ func (s *TransferService) emitFileUpdate(file *models.FileInfo) {
 
 func (s *TransferService) emitProgress(job *models.TransferJob, p core.Progress) {
 	if s.ctx != nil {
-		runtime.EventsEmit(s.ctx, "transfer:progress", p)
+		runtime.EventsEmit(s.ctx, "transfer:progress", map[string]interface{}{
+			"jobId":       job.ID,
+			"bytesCopied": job.BytesCopied,
+			"totalBytes":  job.TotalBytes,
+			"speed":       p.Speed,
+		})
 	}
 }
 
