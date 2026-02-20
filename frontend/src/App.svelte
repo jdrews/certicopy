@@ -191,6 +191,7 @@
             ) + 1
           : 0}
         totalFiles={activeFiles.length}
+        transferStatus={activeTransfer?.status || ""}
       />
       <OverallProgress transfer={activeTransfer} {currentSpeed} />
       <TransferGraph transfer={activeTransfer} {currentSpeed} />

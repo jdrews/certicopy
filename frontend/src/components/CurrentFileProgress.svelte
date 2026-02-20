@@ -4,7 +4,14 @@
     export let currentFile: any = null;
     export let currentFileIndex: number = 0;
     export let totalFiles: number = 0;
+    export let transferStatus: string = "";
 
+    // Determine what to show in the path field - empty for success/failure
+    $: displayPath =
+        currentFile?.sourcePath ||
+        (transferStatus === "success" || transferStatus === "failed"
+            ? ""
+            : "Waiting...");
     $: percentage =
         currentFile && currentFile.size > 0
             ? (currentFile.bytesCopied / currentFile.size) * 100
@@ -15,7 +22,7 @@
     <div class="info-row">
         <div class="label-col">
             <div class="path" title={currentFile?.sourcePath || ""}>
-                {currentFile?.sourcePath || "Waiting..."}
+                {displayPath}
             </div>
         </div>
         <div class="stats-col">
