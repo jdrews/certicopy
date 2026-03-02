@@ -74,16 +74,16 @@
         >
     </div>
 
-    <div class="header-row">
-        <div class="col-icon"></div>
-        <div class="col-name">Name</div>
-        <div class="col-hash">Source Hash</div>
-        <div class="col-hash">Dest Hash</div>
-        <div class="col-size">Size</div>
-        <div class="col-msg">Message</div>
-    </div>
-
     <div class="file-rows">
+        <div class="header-row">
+            <div class="col-icon"></div>
+            <div class="col-name">Name</div>
+            <div class="col-hash">Source Hash</div>
+            <div class="col-hash">Dest Hash</div>
+            <div class="col-size">Size</div>
+            <div class="col-msg">Message</div>
+        </div>
+
         {#each filteredFiles as file (file.sourcePath)}
             <div
                 class="file-row {file.status === 'in_progress'
@@ -156,13 +156,18 @@
     }
 
     .header-row {
-        display: flex;
+        display: grid;
+        grid-template-columns: 30px 2fr 100px 100px 90px 1fr;
+        grid-column-gap: 12px;
         background-color: var(--bg-tertiary);
-        padding: 6px 10px;
+        padding: 8px 15px;
         font-weight: 600;
         font-size: 12px;
         color: var(--text-secondary);
         border-bottom: 1px solid var(--border-color);
+        position: sticky;
+        top: 0;
+        z-index: 10;
     }
 
     .file-rows {
@@ -171,8 +176,10 @@
     }
 
     .file-row {
-        display: flex;
-        padding: 4px 10px;
+        display: grid;
+        grid-template-columns: 30px 2fr 100px 100px 90px 1fr;
+        grid-column-gap: 12px;
+        padding: 6px 15px;
         border-bottom: 1px solid #333;
         align-items: center;
     }
@@ -194,33 +201,29 @@
     }
 
     .col-icon {
-        width: 24px;
         text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     .col-name {
-        flex: 2;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        margin-right: 10px;
     }
     .col-hash {
-        width: 100px;
         font-family: monospace;
         color: #aaa;
-        margin-right: 10px;
         display: flex;
         align-items: center;
         gap: 5px;
+        overflow: hidden;
     }
     .col-size {
-        width: 80px;
         text-align: right;
-        margin-right: 15px;
         color: #ccc;
     }
     .col-msg {
-        flex: 1;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
