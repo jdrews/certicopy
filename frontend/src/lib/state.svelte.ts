@@ -10,40 +10,47 @@ import { EventsOn } from "../../wailsjs/runtime/runtime";
 
 /**
  * App State Management using Svelte 5 Runes
- * 
- * Using a singleton class with $state and getters
- * is the recommended way to share global state in Svelte 5.
  */
 class AppState {
   transfers = $state<TransferJob[]>([]);
   activeTransferId = $state<string | null>(null);
-  metrics = $state<Map<string, TransferMetrics>>(new Map());
+  metrics = $state<Record<string, TransferMetrics>>({});
 
   // Getters act as $derived values in Svelte 5 classes
   get activeTransfer() {
+    if (!this.activeTransferId || this.transfers.length === 0) return null;
     return this.transfers.find(t => t.id === this.activeTransferId) || null;
   }
 
   get activeFiles() {
-    return this.activeTransfer?.files || [];
+    const transfer = this.activeTransfer;
+    if (!transfer) return [];
+
+    // Defensive check for 'files' property existence and naming (Wails serialization)
+    return transfer.files ?? (transfer as any).Files ?? [];
   }
 
   get viewMetrics() {
-    return this.activeTransferId ? this.metrics.get(this.activeTransferId) || null : null;
+    return this.activeTransferId ? this.metrics[this.activeTransferId] ?? null : null;
   }
 
   get currentFile() {
-    return this.viewMetrics?.currentFile || null;
+    return this.viewMetrics?.currentFile ?? null;
   }
 
   get lastSpeed() {
-    return this.viewMetrics?.lastSpeed || 0;
+    return this.viewMetrics?.lastSpeed ?? 0;
   }
 
   // --- State Mutations ---
 
   setTransfers(queue: TransferJob[]) {
-    this.transfers = queue;
+    this.transfers = queue ?? [];
+
+    // Auto-select first job if none selected
+    if (!this.activeTransferId && this.transfers.length > 0) {
+      this.activeTransferId = this.transfers[0].id;
+    }
   }
 
   setActiveTransfer(id: string | null) {
@@ -58,31 +65,47 @@ class AppState {
   }
 
   updateFile(file: FileInfo) {
-    const transfer = this.transfers.find(t =>
-      t.files.some(f => f.sourcePath === file.sourcePath)
-    );
+    if (!file?.sourcePath) return;
+
+    // Find which transfer this file belongs to
+    const transfer = this.transfers.find(t => {
+      const files = t.files ?? (t as any).Files ?? [];
+      return files.some((f: any) => f.sourcePath === file.sourcePath);
+    });
+
     if (transfer) {
-      const idx = transfer.files.findIndex(f => f.sourcePath === file.sourcePath);
+      const files = transfer.files ?? (transfer as any).Files;
+      if (!files) return;
+
+      const idx = files.findIndex((f: any) => f.sourcePath === file.sourcePath);
       if (idx !== -1) {
-        transfer.files[idx] = file;
-        // Trigger reactivity for anyone watching the files array
-        transfer.files = [...transfer.files];
+        files[idx] = file;
+
+        // Trigger Svelte's proxy reactivity for array modifications
+        if (transfer.files) transfer.files = [...transfer.files];
+        if ((transfer as any).Files) (transfer as any).Files = [...(transfer as any).Files];
+
+        // Ensure the currentFile in metrics is updated if it matches
+        const m = this.metrics[transfer.id];
+        if (m?.currentFile?.sourcePath === file.sourcePath) {
+          m.currentFile = file;
+        }
       }
     }
   }
 
   updateMetrics(transferId: string, updates: Partial<TransferMetrics>) {
-    const current = this.metrics.get(transferId) || {
+    const current = this.metrics[transferId] ?? {
       dataPoints: [],
       maxSpeed: 0,
       lastSpeed: 0,
       currentFile: null
     };
-    this.metrics.set(transferId, { ...current, ...updates });
+    this.metrics[transferId] = { ...current, ...updates };
   }
 
   updateGraphData(transferId: string, bytesCopied: number, speed: number) {
-    const current = this.metrics.get(transferId) || {
+    const current = this.metrics[transferId] ?? {
       dataPoints: [],
       maxSpeed: 0,
       lastSpeed: 0,
@@ -91,52 +114,52 @@ class AppState {
 
     const lastPoint = current.dataPoints.at(-1);
 
+    // If speed is significantly lower than before or bytesCopied resets, start a new point
     if (lastPoint && bytesCopied < lastPoint.bytesCopied - 1024 * 1024) {
-      this.metrics.set(transferId, {
+      this.metrics[transferId] = {
         dataPoints: [{ bytesCopied, speed }],
         maxSpeed: speed,
         lastSpeed: speed,
         currentFile: current.currentFile
-      });
+      };
       return;
     }
 
-    if (current.dataPoints.length === 0 || bytesCopied > (lastPoint?.bytesCopied || 0)) {
-      this.metrics.set(transferId, {
+    if (current.dataPoints.length === 0 || bytesCopied > (lastPoint?.bytesCopied ?? 0)) {
+      this.metrics[transferId] = {
         dataPoints: [...current.dataPoints, { bytesCopied, speed }],
         maxSpeed: Math.max(current.maxSpeed, speed),
         lastSpeed: speed,
         currentFile: current.currentFile
-      });
+      };
     } else {
-      this.metrics.set(transferId, {
+      this.metrics[transferId] = {
         ...current,
         lastSpeed: speed
-      });
+      };
     }
   }
 
-  /**
-   * Initialize global wails listeners.
-   * Called in App.svelte onMount to ensure context.
-   */
   initEventListeners() {
-    EventsOn("queue:updated", (queue: TransferJob[]) => {
+    EventsOn("queue:updated", (queue: any[]) => {
+      console.log("[AppState] Queue updated:", queue?.length || 0, "jobs");
       this.setTransfers(queue);
     });
 
     EventsOn("file:updated", (file: any) => {
-      // Critical: update the file in the transfers array so FileList sees it
       this.updateFile(file);
 
-      const job = this.transfers.find((j) =>
-        j.files?.some((f) => f.sourcePath === file.sourcePath),
-      );
+      // Map file back to its job to update job-level metrics correctly
+      const job = this.transfers.find((j) => {
+        const files = j.files ?? (j as any).Files ?? [];
+        return files.some((f: any) => f.sourcePath === file.sourcePath);
+      });
+
       if (job) {
         if (file.status === "in_progress") {
           this.updateMetrics(job.id, { currentFile: file });
         } else {
-          const m = this.metrics.get(job.id);
+          const m = this.metrics[job.id];
           if (m?.currentFile?.sourcePath === file.sourcePath) {
             this.updateMetrics(job.id, { currentFile: null });
           }
@@ -147,7 +170,7 @@ class AppState {
     EventsOn("transfer:progress", (progress: any) => {
       const jobId = progress.jobId || this.transfers.find((j) => j.status === "in_progress")?.id;
       if (jobId) {
-        this.updateGraphData(jobId, progress.bytesCopied || 0, progress.speed || 0);
+        this.updateGraphData(jobId, progress.bytesCopied ?? 0, progress.speed ?? 0);
       }
     });
   }

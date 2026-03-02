@@ -10,7 +10,7 @@
 
     const metrics = $derived(
         transfer?.id
-            ? appState.metrics.get(transfer.id) || {
+            ? appState.metrics[transfer.id] || {
                   dataPoints: [],
                   maxSpeed: 0,
               }

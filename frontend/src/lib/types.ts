@@ -2,7 +2,7 @@
  * Type definitions for certicopy frontend
  */
 
-export type TransferStatus = 'pending' | 'in_progress' | 'success' | 'failed' | 'paused';
+export type TransferStatus = 'pending' | 'in_progress' | 'success' | 'failed' | 'paused' | 'cancelled';
 export type FileStatus = TransferStatus | 'skipped';
 
 export interface FileInfo {
@@ -10,11 +10,12 @@ export interface FileInfo {
   destPath: string;
   name: string;
   size: number;
-  bytesCopied: number;
+  modTime: number; // Unix milliseconds
   status: FileStatus;
   sourceHash?: string;
   destHash?: string;
   errorMessage?: string;
+  bytesCopied: number;
 }
 
 export interface TransferJob {
@@ -26,9 +27,9 @@ export interface TransferJob {
   totalBytes: number;
   bytesCopied: number;
   files: FileInfo[];
-  createdAt: string;
-  startedAt?: string;
-  completedAt?: string;
+  createdAt: number; // Unix milliseconds
+  startedAt?: number; // Unix milliseconds
+  completedAt?: number; // Unix milliseconds
   error?: string;
 }
 

@@ -79,12 +79,14 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 
 	// ## Handle Resume / Existing File
 	var startOffset int64
+	var isAppending bool
 	if opts.Resume {
 		if exists, _ := afero.Exists(c.dstFs, dst); exists {
 			dstInfo, err := c.dstFs.Stat(dst)
 			if err == nil {
 				if dstInfo.Size() < totalBytes {
 					startOffset = dstInfo.Size()
+					isAppending = true
 					fmt.Printf("Copier: Resuming at offset %d\n", startOffset)
 				} else if dstInfo.Size() == totalBytes {
 					fmt.Println("Copier: File already fully copied")
@@ -109,7 +111,7 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 
 	// ## Open/Create destination file
 	var dstFile afero.File
-	if startOffset > 0 {
+	if isAppending {
 		// Open for appending/resume
 		dstFile, err = c.dstFs.OpenFile(dst, os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
@@ -126,6 +128,10 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 		}
 	} else {
 		// New file or overwrite
+		// If resume is true and file exists, it was likely handled above.
+		// If it reaches here and exists, it means either:
+		// 1. Resume is false and file exists (must check Overwrite)
+		// 2. Resume is true but file size check failed (must check Overwrite)
 		if exists, _ := afero.Exists(c.dstFs, dst); exists && !opts.Overwrite {
 			return fmt.Errorf("destination exists and overwrite is false")
 		}
