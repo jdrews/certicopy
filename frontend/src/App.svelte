@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount, tick } from "svelte";
+  import { onMount } from "svelte";
+  import type { FileInfo } from "./lib/types";
   import TransferQueue from "./components/TransferQueue.svelte";
   import CurrentFileProgress from "./components/CurrentFileProgress.svelte";
   import OverallProgress from "./components/OverallProgress.svelte";
@@ -9,7 +10,6 @@
   import "./styles/main.css";
 
   // Import Wails runtime
-  import { EventsOn } from "../wailsjs/runtime/runtime";
   import {
     AddTransferToQueue,
     CancelTransfer,
@@ -21,111 +21,36 @@
     StartQueue,
   } from "../wailsjs/go/main/App";
 
-  import {
-    transferMetricsStore,
-    setTransferMetrics,
-    updateGraphData,
-  } from "./utils/stores";
+  import { appState } from "./lib/state.svelte";
 
-  // State
-  let transferQueue: any[] = [];
-  let activeTransfer: any = null;
-  let activeFiles: any[] = []; // Files for the currently selected transfer
-  let showSettings = false;
+  let showSettings = $state(false);
 
-  // Computed metrics based on active transfer
-  $: viewMetrics = activeTransfer
-    ? $transferMetricsStore.get(activeTransfer.id)
-    : null;
-  $: viewFile = viewMetrics?.currentFile || null;
-  $: viewSpeed =
-    activeTransfer?.status === "in_progress" ? viewMetrics?.lastSpeed || 0 : 0;
-
-  onMount(async () => {
-    // Initial Load
-    await loadQueue();
-
-    // Event Listeners
-    EventsOn("queue:updated", (queue: any[]) => {
-      console.log("App: queue:updated event received", queue);
-      transferQueue = queue;
-
-      // If we have an active transfer, update it from the new queue
-      if (activeTransfer) {
-        const updated = queue.find((j) => j.id === activeTransfer.id);
-        if (updated) {
-          activeTransfer = updated;
-          activeFiles = updated.files || [];
-        }
-      }
-
-      // Auto-select first if none selected
-      if (!activeTransfer && queue.length > 0) {
-        handleTransferSelect({ detail: queue[0] });
-      }
-    });
-
-    EventsOn("file:updated", (file: any) => {
-      // Find which transfer this file belongs to
-      const job = transferQueue.find((j) =>
-        j.files?.some((f) => f.sourcePath === file.sourcePath),
-      );
-      if (job) {
-        if (file.status === "in_progress") {
-          setTransferMetrics(job.id, { currentFile: file });
-        } else {
-          // Access store safely
-          const currentMetrics = $transferMetricsStore.get(job.id);
-          if (currentMetrics?.currentFile?.sourcePath === file.sourcePath) {
-            setTransferMetrics(job.id, { currentFile: null });
-          }
-        }
-      }
-
-      // Update file in activeFiles if it belongs to current view
-      if (activeFiles) {
-        const idx = activeFiles.findIndex(
-          (f) => f.sourcePath === file.sourcePath,
-        );
-        if (idx !== -1) {
-          activeFiles[idx] = file;
-          activeFiles = [...activeFiles];
-        }
-      }
-    });
-
-    EventsOn("transfer:progress", (progress: any) => {
-      // Progress usually comes for the active job
-      const jobId =
-        progress.jobId ||
-        transferQueue.find((j) => j.status === "in_progress")?.id;
-      if (jobId) {
-        updateGraphData(jobId, progress.bytesCopied || 0, progress.speed || 0);
-      }
-    });
+  // Actions
+  onMount(() => {
+    appState.initEventListeners();
+    loadQueue();
   });
 
   async function loadQueue() {
     try {
-      transferQueue = (await GetQueue()) || [];
-      if (transferQueue.length > 0 && !activeTransfer) {
-        handleTransferSelect({ detail: transferQueue[0] });
+      const queue = (await GetQueue()) || [];
+      appState.setTransfers(queue as any);
+      if (queue.length > 0 && !appState.activeTransferId) {
+        appState.setActiveTransfer(queue[0].id);
       }
     } catch (e) {
       console.error("Failed to load queue:", e);
     }
   }
 
-  function handleTransferSelect(event: CustomEvent | { detail: any }) {
-    activeTransfer = event.detail;
-    activeFiles = activeTransfer ? activeTransfer.files || [] : [];
+  function handleTransferSelect(transfer: any) {
+    appState.setActiveTransfer(transfer ? transfer.id : null);
   }
 
   // --- Actions ---
 
   async function addNewTransfer() {
     try {
-      // Select source directory (backend now returns [path])
       const sources = await SelectSource();
       if (!sources || sources.length === 0) return;
 
@@ -136,6 +61,7 @@
       console.log("Transfer added to queue");
       StartQueue();
       console.log("StartQueue called");
+      loadQueue(); // Refresh queue
     } catch (e) {
       console.error("Failed to add transfer:", e);
     }
@@ -146,20 +72,20 @@
   <!-- Left Sidebar -->
   <aside class="app-sidebar">
     <TransferQueue
-      queue={transferQueue}
-      {activeTransfer}
-      on:select={handleTransferSelect}
+      queue={appState.transfers}
+      activeTransfer={appState.activeTransfer}
+      onselect={handleTransferSelect}
     />
     <!-- Debug Add Button & Settings -->
     <div style="padding: 10px; display: flex; gap: 5px;">
       <button
-        on:click={addNewTransfer}
+        onclick={addNewTransfer}
         style="flex: 1; padding: 5px; opacity: 0.8; font-weight: bold;"
         >+ New Transfer</button
       >
 
       <button
-        on:click={() => (showSettings = true)}
+        onclick={() => (showSettings = true)}
         style="padding: 5px 10px; opacity: 0.5;"
         title="Settings">⚙</button
       >
@@ -171,42 +97,46 @@
     <!-- Top Progress Bars Area -->
     <div class="progress-area">
       <CurrentFileProgress
-        currentFile={viewFile}
-        currentFileIndex={viewFile && activeFiles
-          ? activeFiles.findIndex((f) => f.sourcePath === viewFile.sourcePath) +
-            1
+        currentFileIndex={appState.currentFile && appState.activeFiles
+          ? appState.activeFiles.findIndex(
+              (f: any) => f.sourcePath === appState.currentFile?.sourcePath,
+            ) + 1
           : 0}
-        totalFiles={activeFiles.length}
-        transferStatus={activeTransfer?.status || ""}
+        totalFiles={appState.activeFiles.length}
+        transferStatus={appState.activeTransfer?.status || ""}
       />
-      <OverallProgress transfer={activeTransfer} currentSpeed={viewSpeed} />
-      <TransferGraph transfer={activeTransfer} currentSpeed={viewSpeed} />
+      <OverallProgress
+        transfer={appState.activeTransfer}
+        currentSpeed={appState.lastSpeed}
+      />
+      <TransferGraph
+        transfer={appState.activeTransfer}
+        currentSpeed={appState.lastSpeed}
+      />
 
       <!-- Action Buttons Bar -->
       <div class="action-bar">
         <div class="actions-left">
-          {#if activeTransfer?.status === "in_progress"}
-            <button
-              class="btn btn-action"
-              title="Pause"
-              on:click={PauseTransfer}>Pause</button
+          {#if appState.activeTransfer?.status === "in_progress"}
+            <button class="btn btn-action" title="Pause" onclick={PauseTransfer}
+              >Pause</button
             >
             <button class="btn btn-action" title="Skip Current File"
               >Skip</button
             >
           {/if}
-          {#if activeTransfer?.status === "in_progress" || activeTransfer?.status === "pending"}
+          {#if appState.activeTransfer?.status === "in_progress" || appState.activeTransfer?.status === "pending"}
             <button
               class="btn btn-action btn-danger"
               title="Stop Transfer"
-              on:click={CancelTransfer}>Stop</button
+              onclick={CancelTransfer}>Stop</button
             >
           {/if}
-          {#if activeTransfer?.status === "failed" || (activeTransfer?.status === "pending" && !activeTransfer?.startedAt)}
+          {#if appState.activeTransfer?.status === "failed" || (appState.activeTransfer?.status === "pending" && !appState.activeTransfer?.startedAt)}
             <button
               class="btn btn-action btn-success"
               title="Resume Transfer"
-              on:click={ResumeTransfer}>Resume</button
+              onclick={ResumeTransfer}>Resume</button
             >
           {/if}
         </div>
@@ -215,7 +145,7 @@
 
     <!-- Bottom File List Area -->
     <div class="list-area">
-      <FileList files={activeFiles} />
+      <FileList files={appState.activeFiles} />
     </div>
   </section>
 

@@ -1,34 +1,30 @@
 <script lang="ts">
     import { formatBytes } from "../utils/formatters";
+    import { appState } from "../lib/state.svelte";
+    import type { DataPoint } from "../lib/types";
 
-    import {
-        transferMetricsStore,
-        updateGraphData,
-        type DataPoint,
-    } from "../utils/stores";
+    const { transfer, currentSpeed } = $props<{
+        transfer: any;
+        currentSpeed: number;
+    }>();
 
-    export let transfer: any = null;
-    export let currentSpeed: number = 0;
-
-    let dataPoints: DataPoint[] = [];
-    let maxSpeed = 0;
-
-    // Update view when transfer changes or store updates
-    $: {
-        if (transfer?.id) {
-            const metrics = $transferMetricsStore.get(transfer.id);
-            if (metrics) {
-                dataPoints = metrics.dataPoints;
-                maxSpeed = metrics.maxSpeed;
-            } else {
-                dataPoints = [];
-                maxSpeed = 0;
-            }
-        }
-    }
+    const metrics = $derived(
+        transfer?.id
+            ? appState.metrics.get(transfer.id) || {
+                  dataPoints: [],
+                  maxSpeed: 0,
+              }
+            : { dataPoints: [], maxSpeed: 0 },
+    );
 
     // Generate SVG path with bytes-based x-axis
-    $: pathD = generatePath(dataPoints, maxSpeed, transfer?.totalBytes || 0);
+    const pathD = $derived(
+        generatePath(
+            metrics.dataPoints,
+            metrics.maxSpeed,
+            transfer?.totalBytes || 0,
+        ),
+    );
 
     function generatePath(
         data: DataPoint[],
@@ -37,41 +33,38 @@
     ): string {
         if (data.length < 2 || totalBytes <= 0) return "";
 
-        const width = 100; // SVG viewBox percentage
+        const width = 100;
         const height = 100;
-        const yScale = max > 0 ? height / (max * 1.1) : 0; // Leave 10% headroom
+        const yScale = max > 0 ? height / (max * 1.1) : 0;
 
-        // Start at 0,0 (0 bytes transferred)
         let d = `M 0 ${height - data[0].speed * yScale}`;
 
         for (let i = 1; i < data.length; i++) {
-            // X position based on percentage of total bytes transferred
             const x = (data[i].bytesCopied / totalBytes) * width;
             const y = height - data[i].speed * yScale;
             d += ` L ${x} ${y}`;
         }
 
-        // Fill area - close the path at the bottom
         const lastX = (data[data.length - 1].bytesCopied / totalBytes) * width;
         d += ` L ${lastX} ${height} L 0 ${height} Z`;
 
         return d;
     }
 
-    // Calculate progress percentage for display
-    $: progressPercent =
+    const progressPercent = $derived(
         transfer?.totalBytes > 0
             ? Math.round((transfer.bytesCopied / transfer.totalBytes) * 100)
-            : 0;
+            : 0,
+    );
 
-    // Check if transfer is complete with data
-    $: isCompleteWithData =
+    const isCompleteWithData = $derived(
         (transfer?.status === "success" || transfer?.status === "completed") &&
-        dataPoints.length > 2;
+            metrics.dataPoints.length > 2,
+    );
 </script>
 
 <div class="graph-container">
-    {#if dataPoints.length > 2}
+    {#if metrics.dataPoints.length > 2}
         <svg viewBox="0 0 100 100" preserveAspectRatio="none">
             <defs>
                 <linearGradient id="grad1" x1="0%" y1="0%" x2="0%" y2="100%">

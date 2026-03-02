@@ -5,21 +5,19 @@
         formatSpeed,
     } from "../utils/formatters";
 
-    export let transfer: any = null;
-    export let currentSpeed: number = 0;
+    const { transfer, currentSpeed } = $props<{ transfer: any; currentSpeed: number }>();
 
-    $: percentage =
+    let percentage = $derived(
         transfer && transfer.totalBytes > 0
             ? (transfer.bytesCopied / transfer.totalBytes) * 100
-            : 0;
+            : 0
+    );
 
-    // Prevent NaN
-    $: if (isNaN(percentage)) percentage = 0;
-
-    $: eta =
+    const eta = $derived(
         currentSpeed > 0 && transfer
             ? (transfer.totalBytes - transfer.bytesCopied) / currentSpeed
-            : 0;
+            : 0
+    );
 </script>
 
 <div class="progress-panel">

@@ -1,37 +1,42 @@
 <script lang="ts">
     import { formatBytes } from "../utils/formatters";
+    import { appState } from "../lib/state.svelte";
 
-    export let currentFile: any = null;
-    export let currentFileIndex: number = 0;
-    export let totalFiles: number = 0;
-    export let transferStatus: string = "";
+    const { currentFileIndex, totalFiles, transferStatus } = $props<{
+        currentFileIndex: number;
+        totalFiles: number;
+        transferStatus: string;
+    }>();
 
     // Determine what to show in the path field - empty for success/failure
-    $: displayPath =
-        currentFile?.sourcePath ||
-        (transferStatus === "success" || transferStatus === "failed"
-            ? ""
-            : "Waiting...");
-    $: percentage =
-        currentFile && currentFile.size > 0
-            ? (currentFile.bytesCopied / currentFile.size) * 100
-            : 0;
+    const displayPath = $derived(
+        appState.currentFile?.sourcePath ||
+            (transferStatus === "success" || transferStatus === "failed"
+                ? ""
+                : "Waiting..."),
+    );
+    const percentage = $derived(
+        appState.currentFile && appState.currentFile.size > 0
+            ? (appState.currentFile.bytesCopied / appState.currentFile.size) *
+                  100
+            : 0,
+    );
 </script>
 
 <div class="progress-panel">
     <div class="info-row">
         <div class="label-col">
-            <div class="path" title={currentFile?.sourcePath || ""}>
+            <div class="path" title={appState.currentFile?.sourcePath || ""}>
                 {displayPath}
             </div>
         </div>
         <div class="stats-col">
-            {#if currentFile}
+            {#if appState.currentFile}
                 <span class="file-count">{currentFileIndex} / {totalFiles}</span
                 >
                 <span class="size-progress">
-                    {formatBytes(currentFile.bytesCopied)} / {formatBytes(
-                        currentFile.size,
+                    {formatBytes(appState.currentFile.bytesCopied)} / {formatBytes(
+                        appState.currentFile.size,
                     )}
                 </span>
                 <span class="percentage">{percentage.toFixed(1)}%</span>

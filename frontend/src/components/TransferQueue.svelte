@@ -1,14 +1,15 @@
 <script lang="ts">
-    import { createEventDispatcher } from "svelte";
     import { formatBytes } from "../utils/formatters";
+    import type { TransferJob } from "../lib/types";
 
-    export let queue: any[] = [];
-    export let activeTransfer: any = null;
+    const { queue, activeTransfer, onselect } = $props<{
+        queue: TransferJob[];
+        activeTransfer: TransferJob | null;
+        onselect?: (transfer: TransferJob) => void;
+    }>();
 
-    const dispatch = createEventDispatcher();
-
-    function selectTransfer(transfer: any) {
-        dispatch("select", transfer);
+    function selectTransfer(transfer: TransferJob) {
+        onselect?.(transfer);
     }
 </script>
 
@@ -22,7 +23,7 @@
                 activeTransfer.id === transfer.id
                     ? 'selected'
                     : ''}"
-                on:click={() => selectTransfer(transfer)}
+                onclick={() => selectTransfer(transfer)}
             >
                 <div class="transfer-icon">
                     {#if transfer.status === "in_progress"}

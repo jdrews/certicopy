@@ -4,9 +4,9 @@
     // We'll trust they will be generated correctly matching App.go
     import { GetSettings, SaveSettings } from "../../wailsjs/go/main/App";
 
-    export let show = false;
+    let { show = $bindable(false) } = $props<{ show?: boolean }>();
 
-    let settings = {
+    let settings = $state({
         theme: "dark",
         defaultDestPath: "",
         hashAlgorithm: "xxhash",
@@ -14,7 +14,7 @@
         showNotifications: true,
         playSoundOnFinish: true,
         autoVerify: true,
-    };
+    });
 
     // While bindings are not generated, we might want to mock GetSettings/SaveSettings locally for UI dev
     // or just rely on the fact that we will build soon.
@@ -50,8 +50,8 @@
 </script>
 
 {#if show}
-    <div class="modal-backdrop" on:click={close}>
-        <div class="modal" on:click|stopPropagation>
+    <div class="modal-backdrop" onclick={close}>
+        <div class="modal" stopPropagation.onclick>
             <h2>Settings</h2>
 
             <div class="form-group">
@@ -109,8 +109,8 @@
             </div>
 
             <div class="actions">
-                <button class="btn-cancel" on:click={close}>Cancel</button>
-                <button class="btn-save" on:click={save}>Save</button>
+                <button class="btn-cancel" onclick={close}>Cancel</button>
+                <button class="btn-save" onclick={save}>Save</button>
             </div>
         </div>
     </div>

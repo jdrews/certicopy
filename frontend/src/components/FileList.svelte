@@ -1,18 +1,22 @@
 <script lang="ts">
     import { createEventDispatcher } from "svelte";
     import { formatBytes } from "../utils/formatters";
+    import { appState } from "../lib/state.svelte";
+    import type { FileStatus } from "../lib/types";
 
-    export let files: any[] = [];
-    export let filter: "all" | "success" | "failed" = "all";
+    let { files = [], filter = $bindable("all") } = $props<{
+        files: any[];
+        filter?: "all" | "success" | "failed";
+    }>();
 
-    const dispatch = createEventDispatcher();
-
-    $: filteredFiles = files.filter((f) => {
-        if (filter === "all") return true;
-        if (filter === "success") return f.status === "success";
-        if (filter === "failed") return f.status === "failed";
-        return true;
-    });
+    const filteredFiles = $derived(
+        files.filter((f: any) => {
+            if (filter === "all") return true;
+            if (filter === "success") return f.status === "success";
+            if (filter === "failed") return f.status === "failed";
+            return true;
+        }),
+    );
 
     function getStatusIcon(status: string) {
         switch (status) {
@@ -58,15 +62,15 @@
     <div class="list-tabs">
         <button
             class="tab-btn {filter === 'all' ? 'active' : ''}"
-            on:click={() => (filter = "all")}>All</button
+            onclick={() => (filter = "all")}>All</button
         >
         <button
             class="tab-btn {filter === 'success' ? 'active' : ''}"
-            on:click={() => (filter = "success")}>Succeeded</button
+            onclick={() => (filter = "success")}>Succeeded</button
         >
         <button
             class="tab-btn {filter === 'failed' ? 'active' : ''}"
-            on:click={() => (filter = "failed")}>Failed</button
+            onclick={() => (filter = "failed")}>Failed</button
         >
     </div>
 
@@ -95,10 +99,10 @@
                     {file.name}
                 </div>
                 <div class="col-hash monospace" title={file.sourceHash}>
-                    {formatHash(file.sourceHash)}
+                    {formatHash(file.sourceHash || "")}
                 </div>
                 <div class="col-hash monospace" title={file.destHash}>
-                    {formatHash(file.destHash)}
+                    {formatHash(file.destHash || "")}
                     {#if file.destHash && file.sourceHash && file.destHash !== file.sourceHash}
                         <span class="hash-mismatch" title="Hash Mismatch"
                             >⚠</span
