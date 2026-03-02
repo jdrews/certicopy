@@ -217,7 +217,6 @@ func (s *TransferService) emitQueueUpdate() {
 		fmt.Println("emitQueueUpdate: context is nil, cannot emit")
 		return
 	}
-	fmt.Println("emitQueueUpdate: emitting queue:updated")
 	runtime.EventsEmit(s.ctx, "queue:updated", s.queue.GetAll())
 }
 

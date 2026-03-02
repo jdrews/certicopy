@@ -39,11 +39,14 @@
                 <div class="transfer-details">
                     <div
                         class="transfer-source"
-                        title={transfer.sources[0] || "Unknown"}
+                        title={"Src: " + (transfer.sources[0] || "Unknown")}
                     >
                         {transfer.sources[0] || "Unknown Source"}
                     </div>
-                    <div class="transfer-dest" title={transfer.destination}>
+                    <div
+                        class="transfer-dest"
+                        title={"Dst: " + transfer.destination}
+                    >
                         {transfer.destination}
                     </div>
                     <div class="transfer-info">
