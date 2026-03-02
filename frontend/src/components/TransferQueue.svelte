@@ -37,8 +37,14 @@
                     {/if}
                 </div>
                 <div class="transfer-details">
-                    <div class="transfer-name">
-                        {transfer.name || "Untitled Transfer"}
+                    <div
+                        class="transfer-source"
+                        title={transfer.sources[0] || "Unknown"}
+                    >
+                        {transfer.sources[0] || "Unknown Source"}
+                    </div>
+                    <div class="transfer-dest" title={transfer.destination}>
+                        {transfer.destination}
                     </div>
                     <div class="transfer-info">
                         <span class="size"
@@ -134,17 +140,27 @@
         overflow: hidden;
     }
 
-    .transfer-name {
-        font-weight: 500;
+    .transfer-source {
+        font-weight: 600;
+        font-size: 13px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        margin-bottom: 2px;
+        margin-bottom: 1px;
+    }
+
+    .transfer-dest {
+        font-size: 11px;
+        color: var(--text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 4px;
     }
 
     .transfer-info {
-        font-size: var(--font-size-sm);
-        color: var(--text-secondary);
+        font-size: 11px;
+        color: var(--text-tertiary);
     }
 
     .empty-state {
