@@ -28,6 +28,8 @@
                 <div class="transfer-icon">
                     {#if transfer.status === "in_progress"}
                         <span class="icon-active">⟳</span>
+                    {:else if transfer.status === "paused"}
+                        <span class="icon-paused">⏸</span>
                     {:else if transfer.status === "success"}
                         <span class="icon-success">✓</span>
                     {:else if transfer.status === "failed"}
@@ -125,14 +127,17 @@
     }
 
     .icon-active {
-        color: var(--accent-color);
+        color: #3b82f6;
         animation: spin 2s linear infinite;
     }
+    .icon-paused {
+        color: #f59e0b;
+    }
     .icon-success {
-        color: var(--success-color);
+        color: #10b981;
     }
     .icon-failed {
-        color: var(--error-color);
+        color: #ef4444;
     }
     .icon-pending {
         color: var(--text-secondary);

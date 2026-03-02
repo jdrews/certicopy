@@ -121,22 +121,19 @@
             <button class="btn btn-action" title="Pause" onclick={PauseTransfer}
               >Pause</button
             >
-            <button class="btn btn-action" title="Skip Current File"
-              >Skip</button
-            >
           {/if}
-          {#if appState.activeTransfer?.status === "in_progress" || appState.activeTransfer?.status === "pending"}
-            <button
-              class="btn btn-action btn-danger"
-              title="Stop Transfer"
-              onclick={CancelTransfer}>Stop</button
-            >
-          {/if}
-          {#if appState.activeTransfer?.status === "failed" || (appState.activeTransfer?.status === "pending" && !appState.activeTransfer?.startedAt)}
+          {#if appState.activeTransfer?.status === "paused" || appState.activeTransfer?.status === "failed"}
             <button
               class="btn btn-action btn-success"
               title="Resume Transfer"
               onclick={ResumeTransfer}>Resume</button
+            >
+          {/if}
+          {#if appState.activeTransfer?.status === "in_progress" || appState.activeTransfer?.status === "pending" || appState.activeTransfer?.status === "paused"}
+            <button
+              class="btn btn-action btn-danger"
+              title="Cancel Transfer"
+              onclick={CancelTransfer}>Cancel</button
             >
           {/if}
         </div>

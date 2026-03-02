@@ -13,7 +13,8 @@
         files.filter((f: any) => {
             if (filter === "all") return true;
             if (filter === "success") return f.status === "success";
-            if (filter === "failed") return f.status === "failed";
+            if (filter === "failed")
+                return f.status === "failed" || f.status === "paused";
             return true;
         }),
     );
@@ -30,6 +31,8 @@
                 return "⋯";
             case "skipped":
                 return "↷";
+            case "paused":
+                return "⏸";
             default:
                 return "";
         }
@@ -43,6 +46,8 @@
                 return "status-failed";
             case "in_progress":
                 return "status-active";
+            case "paused":
+                return "status-paused";
             default:
                 return "status-pending";
         }
@@ -90,6 +95,8 @@
                     ? 'row-active'
                     : ''} {file.status === 'failed'
                     ? 'row-failed'
+                    : ''} {file.status === 'paused'
+                    ? 'row-paused'
                     : ''} {file.status === 'success' ? 'row-success' : ''}"
             >
                 <div class="col-icon {getStatusClass(file.status)}">
@@ -195,7 +202,9 @@
     .row-failed {
         background-color: rgba(244, 71, 71, 0.1);
     }
-
+    .row-paused {
+        background-color: rgba(245, 158, 11, 0.15);
+    }
     .row-success {
         /* Optional: slight green tint or just default */
     }
@@ -238,6 +247,9 @@
     }
     .status-active {
         color: var(--accent-color);
+    }
+    .status-paused {
+        color: #f59e0b;
     }
     .status-pending {
         color: var(--text-secondary);

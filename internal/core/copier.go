@@ -1,9 +1,11 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"hash"
 	"io"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -18,6 +20,7 @@ type CopyOptions struct {
 	CalculateHash bool
 	HashAlgorithm HashAlgorithm
 	Overwrite     bool
+	Resume        bool
 }
 
 // Progress update struct
@@ -51,13 +54,14 @@ func (c *Copier) Copy(src string, dst string, opts CopyOptions) error {
 		for range progressChan {
 		}
 	}()
-	return c.CopyWithProgress(src, dst, opts, progressChan)
+	return c.CopyWithProgress(context.Background(), src, dst, opts, progressChan)
 }
 
-// CopyWithProgress performs a file copy and streams progress updates
-func (c *Copier) CopyWithProgress(src string, dst string, opts CopyOptions, progressChan chan<- Progress) error {
+// CopyWithProgress performs a file copy and streams progress updates.
+// Supports context cancellation and byte-level resume.
+func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, opts CopyOptions, progressChan chan<- Progress) error {
 	defer close(progressChan)
-	fmt.Printf("Copier: Start copying %s to %s\n", src, dst)
+	fmt.Printf("Copier: Start copying %s to %s (Resume: %v)\n", src, dst, opts.Resume)
 
 	// ## Open source file
 	srcFile, err := c.srcFs.Open(src)
@@ -71,6 +75,31 @@ func (c *Copier) CopyWithProgress(src string, dst string, opts CopyOptions, prog
 	if err != nil {
 		return fmt.Errorf("failed to stat source: %w", err)
 	}
+	totalBytes := srcInfo.Size()
+
+	// ## Handle Resume / Existing File
+	var startOffset int64
+	if opts.Resume {
+		if exists, _ := afero.Exists(c.dstFs, dst); exists {
+			dstInfo, err := c.dstFs.Stat(dst)
+			if err == nil {
+				if dstInfo.Size() < totalBytes {
+					startOffset = dstInfo.Size()
+					fmt.Printf("Copier: Resuming at offset %d\n", startOffset)
+				} else if dstInfo.Size() == totalBytes {
+					fmt.Println("Copier: File already fully copied")
+					// Send completion progress
+					if progressChan != nil {
+						progressChan <- Progress{
+							BytesCopied: totalBytes,
+							TotalBytes:  totalBytes,
+						}
+					}
+					return nil
+				}
+			}
+		}
+	}
 
 	// ## Create destination directory if it doesn't exist
 	destDir := filepath.Dir(dst)
@@ -78,30 +107,37 @@ func (c *Copier) CopyWithProgress(src string, dst string, opts CopyOptions, prog
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
-	// ## Check destination
-	if exists, _ := afero.Exists(c.dstFs, dst); exists {
-		if !opts.Overwrite {
+	// ## Open/Create destination file
+	var dstFile afero.File
+	if startOffset > 0 {
+		// Open for appending/resume
+		dstFile, err = c.dstFs.OpenFile(dst, os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to open destination for resume: %w", err)
+		}
+
+		// Seek source file to startOffset
+		seeker, ok := srcFile.(io.Seeker)
+		if !ok {
+			return fmt.Errorf("source file does not support seeking")
+		}
+		if _, err := seeker.Seek(startOffset, io.SeekStart); err != nil {
+			return fmt.Errorf("failed to seek source file: %w", err)
+		}
+	} else {
+		// New file or overwrite
+		if exists, _ := afero.Exists(c.dstFs, dst); exists && !opts.Overwrite {
 			return fmt.Errorf("destination exists and overwrite is false")
 		}
-		// Warning: If we don't truncate or remove, io.Copy might behave differently depending on flags.
-		// afero.Create forces truncation.
-	}
 
-	// ## Create destination file
-	dstFile, err := c.dstFs.Create(dst)
-	if err != nil {
-		return fmt.Errorf("failed to create destination: %w", err)
+		dstFile, err = c.dstFs.Create(dst)
+		if err != nil {
+			return fmt.Errorf("failed to create destination: %w", err)
+		}
 	}
 	defer dstFile.Close()
 
-	// ## Allow specifying buffer size
-	bufSize := opts.BufferSize
-	if bufSize <= 0 {
-		bufSize = 1024 * 1024 // Default 1MB
-	}
-	buf := make([]byte, bufSize)
-
-	// ## Setup streaming checksum
+	// ## Setup streaming checksum (Note: only hashes NEW data during copy)
 	var hasher hash.Hash
 	var hashResult string
 	if opts.CalculateHash {
@@ -114,15 +150,17 @@ func (c *Copier) CopyWithProgress(src string, dst string, opts CopyOptions, prog
 
 	// ## Setup progress tracking
 	startTime := time.Now()
-	totalBytes := srcInfo.Size()
 
-	// Create a proxy reader that updates progress and writes to hasher
+	// Create a proxy reader that updates progress, writes to hasher, and checks context
 	proxyReader := &ReaderProxy{
-		Reader: srcFile,
-		Total:  totalBytes,
-		Context: &ProgressContext{
-			Channel:   progressChan,
-			StartTime: startTime,
+		Reader:  srcFile,
+		Total:   totalBytes,
+		Context: ctx,
+		ProgressCtx: &ProgressContext{
+			Channel:     progressChan,
+			StartTime:   startTime,
+			BytesRead:   startOffset,
+			TotalOffset: startOffset,
 		},
 	}
 
@@ -133,15 +171,28 @@ func (c *Copier) CopyWithProgress(src string, dst string, opts CopyOptions, prog
 	}
 
 	// ## Perform Copy
-	// Use io.CopyBuffer for buffered copy
+	buf := make([]byte, opts.BufferSize)
+	if len(buf) == 0 {
+		buf = make([]byte, 1024*1024) // 1MB default
+	}
+
 	written, err := io.CopyBuffer(dstFile, reader, buf)
 	if err != nil {
 		return fmt.Errorf("copy failed: %w", err)
 	}
 
-	// Calculate source hash immediately after copy
-	if hasher != nil {
-		hashResult = fmt.Sprintf("%x", hasher.Sum(nil))
+	// ## Verification Logic: If we resumed, we MUST re-hash the source file fully
+	if opts.CalculateHash {
+		if startOffset > 0 {
+			fmt.Println("Copier: Performing mandatory full re-hash for resume")
+			fullSourceHash, err := CalculateChecksum(src, opts.HashAlgorithm)
+			if err != nil {
+				return fmt.Errorf("failed to calculate full source hash: %w", err)
+			}
+			hashResult = fullSourceHash
+		} else if hasher != nil {
+			hashResult = fmt.Sprintf("%x", hasher.Sum(nil))
+		}
 	}
 
 	// ## Calculate destination hash for verification
@@ -163,7 +214,7 @@ func (c *Copier) CopyWithProgress(src string, dst string, opts CopyOptions, prog
 	// ## Send final progress
 	if progressChan != nil {
 		progressChan <- Progress{
-			BytesCopied: written,
+			BytesCopied: startOffset + written,
 			TotalBytes:  totalBytes,
 			Speed:       float64(written) / time.Since(startTime).Seconds(),
 			SourceHash:  hashResult,
@@ -174,12 +225,14 @@ func (c *Copier) CopyWithProgress(src string, dst string, opts CopyOptions, prog
 	// ## Preserve Metadata
 	if opts.PreservePerms {
 		if err := c.dstFs.Chmod(dst, srcInfo.Mode()); err != nil {
-			// Log warning?
+			// Log warning
 		}
 	}
 	if opts.PreserveTimes {
+		// NOTE: Be careful with Chtimes for partial copies.
+		// For now, only preserve times on successful full completion.
 		if err := c.dstFs.Chtimes(dst, time.Now(), srcInfo.ModTime()); err != nil {
-			// Log warning?
+			// Log warning
 		}
 	}
 
@@ -187,32 +240,40 @@ func (c *Copier) CopyWithProgress(src string, dst string, opts CopyOptions, prog
 }
 
 type ProgressContext struct {
-	Channel   chan<- Progress
-	StartTime time.Time
-	BytesRead int64
+	Channel     chan<- Progress
+	StartTime   time.Time
+	BytesRead   int64
+	TotalOffset int64
 }
 
 type ReaderProxy struct {
-	Reader  io.Reader
-	Total   int64
-	Context *ProgressContext
+	Reader      io.Reader
+	Total       int64
+	Context     context.Context
+	ProgressCtx *ProgressContext
 }
 
 func (r *ReaderProxy) Read(p []byte) (n int, err error) {
+	// Check for cancellation before each read
+	select {
+	case <-r.Context.Done():
+		return 0, r.Context.Err()
+	default:
+	}
+
 	n, err = r.Reader.Read(p)
-	r.Context.BytesRead += int64(n)
+	r.ProgressCtx.BytesRead += int64(n)
 
 	// Emit progress
 	// Note: In production, we might want to throttle this to every 500ms
 	// For now, we'll let the receiver handle throttling or add a ticker here
 	select {
-	case r.Context.Channel <- Progress{
-		BytesCopied: r.Context.BytesRead,
+	case r.ProgressCtx.Channel <- Progress{
+		BytesCopied: r.ProgressCtx.BytesRead,
 		TotalBytes:  r.Total,
-		Speed:       float64(r.Context.BytesRead) / time.Since(r.Context.StartTime).Seconds(),
+		Speed:       float64(r.ProgressCtx.BytesRead-r.ProgressCtx.TotalOffset) / time.Since(r.ProgressCtx.StartTime).Seconds(),
 	}:
 	default:
-		// Non-blocking send to avoid slowing down copy if channel is full
 	}
 
 	return

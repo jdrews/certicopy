@@ -65,6 +65,8 @@ class AppState {
       const idx = transfer.files.findIndex(f => f.sourcePath === file.sourcePath);
       if (idx !== -1) {
         transfer.files[idx] = file;
+        // Trigger reactivity for anyone watching the files array
+        transfer.files = [...transfer.files];
       }
     }
   }
@@ -124,6 +126,9 @@ class AppState {
     });
 
     EventsOn("file:updated", (file: any) => {
+      // Critical: update the file in the transfers array so FileList sees it
+      this.updateFile(file);
+
       const job = this.transfers.find((j) =>
         j.files?.some((f) => f.sourcePath === file.sourcePath),
       );

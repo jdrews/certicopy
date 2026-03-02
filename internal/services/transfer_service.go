@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jdrews/certicopy/internal/core"
@@ -108,11 +110,14 @@ func (s *TransferService) processQueue() {
 			file := job.Files[i] // Pointer to file in slice
 			fmt.Printf("processQueue: Checking file %s (Status: %s)\n", file.Name, file.Status)
 
-			// Check for cancellation
 			select {
 			case <-ctx.Done():
-				job.Status = models.StatusFailed
-				job.Error = "Cancelled"
+				// If Pause was called, job.Status will already be StatusPaused.
+				// If Cancel was called, it'll still be "InProgress" or "Failed"
+				if job.Status != models.StatusPaused {
+					job.Status = models.StatusFailed
+					job.Error = "cancelled"
+				}
 				s.emitQueueUpdate()
 				return
 			default:
@@ -123,6 +128,7 @@ func (s *TransferService) processQueue() {
 			}
 
 			file.Status = models.StatusInProgress
+			file.ErrorMessage = "in progress" // Show user-friendly status
 			s.emitFileUpdate(file)
 			s.emitQueueUpdate() // Update queue so UI shows in_progress state
 
@@ -131,7 +137,8 @@ func (s *TransferService) processQueue() {
 				BufferSize:    1024 * 1024, // 1MB default
 				CalculateHash: true,
 				HashAlgorithm: core.HashXXHash, // Default
-				Overwrite:     true,            // Default to overwrite for now
+				Overwrite:     false,           // Don't overwrite when resuming
+				Resume:        true,            // Always try to resume
 				PreservePerms: true,
 				PreserveTimes: true,
 			}
@@ -143,7 +150,7 @@ func (s *TransferService) processQueue() {
 			go func() {
 				fmt.Printf("Starting copy for file: %s\n", file.Name)
 				defer close(errChan)
-				errChan <- s.copier.CopyWithProgress(file.SourcePath, file.DestPath, opts, progressChan)
+				errChan <- s.copier.CopyWithProgress(ctx, file.SourcePath, file.DestPath, opts, progressChan)
 				fmt.Printf("Copy goroutine finished for file: %s\n", file.Name)
 			}()
 
@@ -173,13 +180,21 @@ func (s *TransferService) processQueue() {
 
 			err := <-errChan
 			if err != nil {
-				fmt.Printf("Copy failed for %s: %v\n", file.Name, err)
-				file.Status = models.StatusFailed
-				file.ErrorMessage = err.Error()
+				// Use both errors.Is and string check for robustness against wrapped errors
+				if errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "context canceled") {
+					fmt.Printf("Copy paused for %s\n", file.Name)
+					file.Status = models.StatusPaused
+					file.ErrorMessage = "paused"
+				} else {
+					fmt.Printf("Copy failed for %s: %v\n", file.Name, err)
+					file.Status = models.StatusFailed
+					file.ErrorMessage = err.Error()
+				}
 			} else {
 				fmt.Printf("Copy success for %s\n", file.Name)
 				file.Status = models.StatusSuccess
-				file.BytesCopied = file.Size // Ensure 100%
+				file.ErrorMessage = "success" // Explicitly show success
+				file.BytesCopied = file.Size  // Ensure 100%
 				file.SourceHash = lastProgress.SourceHash
 				file.DestHash = lastProgress.DestHash
 			}
@@ -242,17 +257,32 @@ func (s *TransferService) GetQueue() []*models.TransferJob {
 }
 
 func (s *TransferService) Pause() {
-	// TODO: Implement pause
+	fmt.Println("Pause called")
+	if s.cancel != nil {
+		s.cancel()
+		// Update status of active job and any in_progress files to "paused"
+		job := s.queue.Peek()
+		if job != nil && job.Status == models.StatusInProgress {
+			job.Status = models.StatusPaused
+			for i := range job.Files {
+				if job.Files[i].Status == models.StatusInProgress {
+					job.Files[i].Status = models.StatusPaused
+					job.Files[i].ErrorMessage = "paused"
+				}
+			}
+			s.emitQueueUpdate()
+		}
+	}
 }
 
 func (s *TransferService) Resume() {
 	fmt.Println("Resume called")
-	// Find jobs that were stopped/cancelled and have remaining files to copy
+	// Find jobs that were paused or failed and have remaining files to copy
 	jobs := s.queue.GetAll()
 	resumed := false
 	for _, job := range jobs {
 		// Only resume jobs that are not currently running and have incomplete files
-		if job.Status == models.StatusFailed || job.Status == models.StatusPending {
+		if job.Status == models.StatusPaused || job.Status == models.StatusFailed {
 			hasRemaining := false
 			for _, file := range job.Files {
 				if file.Status != models.StatusSuccess && file.Status != models.StatusSkipped {
@@ -268,13 +298,12 @@ func (s *TransferService) Resume() {
 			job.Status = models.StatusPending
 			job.Error = ""
 
-			// Reset any interrupted (in_progress) or failed files back to pending
-			// so they get re-copied. Success/skipped files are preserved.
+			// Reset any interrupted (paused/failed) files back to pending
+			// but KEEP their BytesCopied so copier can resume
 			for _, file := range job.Files {
-				if file.Status == models.StatusInProgress || file.Status == models.StatusFailed {
+				if file.Status == models.StatusInProgress || file.Status == models.StatusPaused || file.Status == models.StatusFailed {
 					file.Status = models.StatusPending
 					file.ErrorMessage = ""
-					file.BytesCopied = 0
 				}
 			}
 
@@ -289,7 +318,31 @@ func (s *TransferService) Resume() {
 }
 
 func (s *TransferService) Cancel() {
+	fmt.Println("Cancel called")
 	if s.cancel != nil {
 		s.cancel()
+	}
+
+	// Find the job to cancel. We don't use Peek() because it skips Paused jobs.
+	var jobToCancel *models.TransferJob
+	for _, job := range s.queue.GetAll() {
+		if job.Status == models.StatusInProgress || job.Status == models.StatusPaused || job.Status == models.StatusPending {
+			jobToCancel = job
+			break
+		}
+	}
+
+	if jobToCancel != nil {
+		jobToCancel.Status = models.StatusFailed
+		jobToCancel.Error = "cancelled"
+		for i := range jobToCancel.Files {
+			if jobToCancel.Files[i].Status == models.StatusInProgress ||
+				jobToCancel.Files[i].Status == models.StatusPending ||
+				jobToCancel.Files[i].Status == models.StatusPaused {
+				jobToCancel.Files[i].Status = models.StatusFailed
+				jobToCancel.Files[i].ErrorMessage = "cancelled"
+			}
+		}
+		s.emitQueueUpdate()
 	}
 }

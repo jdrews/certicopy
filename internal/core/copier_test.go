@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -42,10 +43,10 @@ func TestCopier_Copy(t *testing.T) {
 	go func() {
 		var err error
 		defer func() {
-			close(progressChan)
 			errChan <- err
 		}()
-		err = copier.CopyWithProgress(srcPath, dstPath, opts, progressChan)
+		ctx := context.Background()
+		err = copier.CopyWithProgress(ctx, srcPath, dstPath, opts, progressChan)
 	}()
 
 	// Consume progress

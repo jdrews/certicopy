@@ -11,6 +11,7 @@ const (
 	StatusSuccess    TransferStatus = "success"
 	StatusFailed     TransferStatus = "failed"
 	StatusSkipped    TransferStatus = "skipped"
+	StatusPaused     TransferStatus = "paused"
 )
 
 // FileInfo contains metadata and transfer status for a single file
