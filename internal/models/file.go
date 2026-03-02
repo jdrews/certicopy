@@ -1,7 +1,5 @@
 package models
 
-import "time"
-
 // TransferStatus represents the current state of a file transfer
 type TransferStatus string
 
@@ -20,7 +18,7 @@ type FileInfo struct {
 	DestPath     string         `json:"destPath"`
 	Name         string         `json:"name"`
 	Size         int64          `json:"size"`
-	ModTime      time.Time      `json:"modTime"`
+	ModTime      int64          `json:"modTime"` // Unix milliseconds
 	Status       TransferStatus `json:"status"`
 	SourceHash   string         `json:"sourceHash"`
 	DestHash     string         `json:"destHash"`

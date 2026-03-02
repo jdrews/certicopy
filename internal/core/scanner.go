@@ -43,7 +43,7 @@ func (s *Scanner) Scan(sources []string, destRoot string) ([]*models.FileInfo, i
 				DestPath:   destPath,
 				Name:       info.Name(),
 				Size:       info.Size(),
-				ModTime:    info.ModTime(),
+				ModTime:    info.ModTime().UnixMilli(),
 				Status:     models.StatusPending,
 			}
 			files = append(files, file)
@@ -81,7 +81,7 @@ func (s *Scanner) Scan(sources []string, destRoot string) ([]*models.FileInfo, i
 				DestPath:   destPath,
 				Name:       info.Name(),
 				Size:       info.Size(),
-				ModTime:    info.ModTime(),
+				ModTime:    info.ModTime().UnixMilli(),
 				Status:     models.StatusPending,
 			}
 			files = append(files, file)

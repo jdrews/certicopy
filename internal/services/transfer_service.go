@@ -61,7 +61,7 @@ func (s *TransferService) AddTransfer(sources []string, dest string) (string, er
 		TotalFiles:  int64(len(files)),
 		TotalBytes:  totalSize,
 		Files:       files,
-		CreatedAt:   time.Now(),
+		CreatedAt:   time.Now().UnixMilli(),
 	}
 
 	s.queue.Add(job)
@@ -99,7 +99,7 @@ func (s *TransferService) processQueue() {
 
 		// Update job status
 		job.Status = models.StatusInProgress
-		job.StartedAt = time.Now()
+		job.StartedAt = time.Now().UnixMilli()
 		s.emitQueueUpdate()
 		// Prepare for cancellation
 		ctx, cancel := context.WithCancel(context.Background())
@@ -219,7 +219,7 @@ func (s *TransferService) processQueue() {
 			}
 		}
 
-		job.CompletedAt = time.Now()
+		job.CompletedAt = time.Now().UnixMilli()
 
 		// Keep completed job in queue so sidebar shows it as done
 		// Don't Pop - let user clear it manually

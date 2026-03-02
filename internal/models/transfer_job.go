@@ -1,7 +1,5 @@
 package models
 
-import "time"
-
 // TransferJob represents a batch of files to be transferred
 type TransferJob struct {
 	ID          string         `json:"id"`
@@ -12,9 +10,9 @@ type TransferJob struct {
 	TotalBytes  int64          `json:"totalBytes"`
 	BytesCopied int64          `json:"bytesCopied"`
 	Files       []*FileInfo    `json:"files"`
-	CreatedAt   time.Time      `json:"createdAt"`
-	StartedAt   time.Time      `json:"startedAt"`
-	CompletedAt time.Time      `json:"completedAt"`
+	CreatedAt   int64          `json:"createdAt"`   // Unix milliseconds
+	StartedAt   int64          `json:"startedAt"`   // Unix milliseconds
+	CompletedAt int64          `json:"completedAt"` // Unix milliseconds
 	Error       string         `json:"error,omitempty"`
 }
 
