@@ -5,6 +5,7 @@ type TransferJob struct {
 	ID          string         `json:"id"`
 	Sources     []string       `json:"sources"`
 	Destination string         `json:"destination"`
+	Overwrite   bool           `json:"overwrite"`
 	Status      TransferStatus `json:"status"`
 	TotalFiles  int64          `json:"totalFiles"`
 	TotalBytes  int64          `json:"totalBytes"`

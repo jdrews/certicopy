@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jdrews/certicopy/internal/models"
 	"github.com/jdrews/certicopy/internal/services"
+	"github.com/spf13/viper"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -29,11 +31,36 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.transferService.SetContext(ctx)
+
+	// Process CLI transfers if any
+	a.processCLITransfers()
+}
+
+func (a *App) processCLITransfers() {
+	transfers := viper.GetStringSlice("transfer")
+	overwrite := viper.GetBool("overwrite")
+
+	for _, t := range transfers {
+		parts := strings.Split(t, ":")
+		if len(parts) != 2 {
+			fmt.Printf("Invalid transfer format: %s. Expected src:dst\n", t)
+			continue
+		}
+		src, dst := parts[0], parts[1]
+		_, err := a.transferService.AddTransfer([]string{src}, dst, overwrite)
+		if err != nil {
+			fmt.Printf("Failed to add CLI transfer %s -> %s: %v\n", src, dst, err)
+		}
+	}
+
+	if len(transfers) > 0 {
+		a.transferService.StartQueue()
+	}
 }
 
 // AddTransferToQueue adds a transfer to the queue
-func (a *App) AddTransferToQueue(sources []string, dest string) (string, error) {
-	return a.transferService.AddTransfer(sources, dest)
+func (a *App) AddTransferToQueue(sources []string, dest string, overwrite bool) (string, error) {
+	return a.transferService.AddTransfer(sources, dest, overwrite)
 }
 
 // StartQueue starts the transfer queue processing

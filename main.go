@@ -2,7 +2,11 @@ package main
 
 import (
 	"embed"
+	"fmt"
+	"os"
 
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -12,6 +16,23 @@ import (
 var assets embed.FS
 
 func main() {
+	// Setup flags
+	help := pflag.BoolP("help", "h", false, "Show this help message")
+	pflag.StringSliceP("transfer", "t", []string{}, "Folders to transfer in src:dst format (e.g. -t /src:/dst)")
+	pflag.BoolP("overwrite", "o", false, "Overwrite existing files at destination")
+	pflag.Parse()
+
+	if *help {
+		fmt.Fprintf(os.Stderr, "CertiCopy - Secure File Transfer with Integrity Verification\n\n")
+		fmt.Fprintf(os.Stderr, "Usage:\n")
+		fmt.Fprintf(os.Stderr, "  certicopy [flags]\n\n")
+		fmt.Fprintf(os.Stderr, "Flags:\n")
+		pflag.PrintDefaults()
+		os.Exit(0)
+	}
+
+	viper.BindPFlags(pflag.CommandLine)
+
 	// Create an instance of the app structure
 	app := NewApp()
 

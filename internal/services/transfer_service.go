@@ -43,7 +43,7 @@ func (s *TransferService) SetContext(ctx context.Context) {
 }
 
 // AddTransfer adds a new transfer job to the queue
-func (s *TransferService) AddTransfer(sources []string, dest string) (string, error) {
+func (s *TransferService) AddTransfer(sources []string, dest string, overwrite bool) (string, error) {
 	fmt.Printf("AddTransfer called with sources: %v, dest: %s\n", sources, dest)
 	// Scan sources
 	files, _, totalSize, err := s.scanner.Scan(sources, dest)
@@ -64,6 +64,7 @@ func (s *TransferService) AddTransfer(sources []string, dest string) (string, er
 		ID:          jobID,
 		Sources:     sources,
 		Destination: dest,
+		Overwrite:   overwrite,
 		Status:      models.StatusPending,
 		TotalFiles:  int64(len(files)),
 		TotalBytes:  totalSize,
@@ -133,12 +134,16 @@ func (s *TransferService) processJob(job *models.TransferJob) bool {
 		if err := s.processFile(ctx, job, file); err != nil {
 			// Check if we should stop processing the entire job
 			if errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "context canceled") {
-				if job.Status != models.StatusPaused {
-					job.Status = models.StatusFailed
-					job.Error = "cancelled"
+				if job.Status == models.StatusPaused {
+					s.emitQueueUpdate()
+					return false // Pause requested, stop queue processing
 				}
+				// Job was canceled, finalize status and continue to next job
+				job.Status = models.StatusFailed
+				job.Error = "cancelled"
+				job.CompletedAt = time.Now().UnixMilli()
 				s.emitQueueUpdate()
-				return false // Stop queue
+				return true // Continue to next job in queue
 			}
 		}
 	}
@@ -161,7 +166,7 @@ func (s *TransferService) processFile(ctx context.Context, job *models.TransferJ
 		BufferSize:    1024 * 1024,
 		CalculateHash: true,
 		HashAlgorithm: core.HashXXHash,
-		Overwrite:     false,
+		Overwrite:     job.Overwrite,
 		Resume:        true,
 		PreservePerms: true,
 		PreserveTimes: true,
@@ -294,10 +299,10 @@ func (s *TransferService) findJob(jobID string) *models.TransferJob {
 }
 
 func (s *TransferService) pauseActiveJob(job *models.TransferJob) {
+	job.Status = models.StatusPaused
 	if s.cancel != nil {
 		s.cancel()
 	}
-	job.Status = models.StatusPaused
 	for i := range job.Files {
 		if job.Files[i].Status == models.StatusInProgress {
 			job.Files[i].Status = models.StatusPaused
@@ -369,6 +374,8 @@ func (s *TransferService) Cancel(jobID string) {
 	job := s.findJobToCancel(jobID)
 	if job != nil {
 		s.cancelSpecificJob(job)
+		// Restart queue processing in case it was stopped due to this job being paused
+		s.StartQueue()
 	}
 }
 
@@ -391,11 +398,14 @@ func (s *TransferService) findJobToCancel(jobID string) *models.TransferJob {
 }
 
 func (s *TransferService) cancelSpecificJob(job *models.TransferJob) {
-	if job.Status == models.StatusInProgress && s.cancel != nil {
-		s.cancel()
-	}
+	oldStatus := job.Status
 	job.Status = models.StatusFailed
 	job.Error = "cancelled"
+	job.CompletedAt = time.Now().UnixMilli()
+
+	if oldStatus == models.StatusInProgress && s.cancel != nil {
+		s.cancel()
+	}
 	for i := range job.Files {
 		status := job.Files[i].Status
 		if status == models.StatusInProgress || status == models.StatusPending || status == models.StatusPaused {

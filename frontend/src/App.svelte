@@ -57,7 +57,7 @@
       const dest = await SelectDestination();
       if (!dest) return;
 
-      await AddTransferToQueue(sources, dest);
+      await AddTransferToQueue(sources, dest, false);
       console.log("Transfer added to queue");
       StartQueue();
       console.log("StartQueue called");

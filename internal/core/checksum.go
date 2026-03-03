@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"os"
 
 	"github.com/cespare/xxhash/v2"
+	"github.com/spf13/afero"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -24,8 +24,8 @@ const (
 )
 
 // CalculateChecksum computes the hash of a file using the specified algorithm
-func CalculateChecksum(filePath string, algo HashAlgorithm) (string, error) {
-	file, err := os.Open(filePath)
+func CalculateChecksum(fs afero.Fs, filePath string, algo HashAlgorithm) (string, error) {
+	file, err := fs.Open(filePath)
 	if err != nil {
 		return "", err
 	}

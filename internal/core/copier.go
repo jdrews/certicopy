@@ -60,7 +60,9 @@ func (c *Copier) Copy(src string, dst string, opts CopyOptions) error {
 // CopyWithProgress performs a file copy and streams progress updates.
 // Supports context cancellation and byte-level resume.
 func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, opts CopyOptions, progressChan chan<- Progress) error {
-	defer close(progressChan)
+	if progressChan != nil {
+		defer close(progressChan)
+	}
 	fmt.Printf("Copier: Start copying %s to %s (Resume: %v)\n", src, dst, opts.Resume)
 
 	// ## Open source file
@@ -77,27 +79,48 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 	}
 	totalBytes := srcInfo.Size()
 
-	// ## Handle Resume / Existing File
+	// ## Handle Overwrite / Resume / Existing File
 	var startOffset int64
 	var isAppending bool
-	if opts.Resume {
+
+	if !opts.Overwrite {
 		if exists, _ := afero.Exists(c.dstFs, dst); exists {
 			dstInfo, err := c.dstFs.Stat(dst)
 			if err == nil {
-				if dstInfo.Size() < totalBytes {
+				if opts.Resume && dstInfo.Size() < totalBytes {
 					startOffset = dstInfo.Size()
 					isAppending = true
 					fmt.Printf("Copier: Resuming at offset %d\n", startOffset)
 				} else if dstInfo.Size() == totalBytes {
-					fmt.Println("Copier: File already fully copied")
-					// Send completion progress
-					if progressChan != nil {
-						progressChan <- Progress{
-							BytesCopied: totalBytes,
-							TotalBytes:  totalBytes,
-						}
+					// Leaning on hash results to know if a file has been fully transferred
+					fmt.Println("Copier: File sizes match. Calculating hashes for verification...")
+					srcHash, err := CalculateChecksum(c.srcFs, src, opts.HashAlgorithm)
+					if err != nil {
+						return fmt.Errorf("failed to calculate source hash: %w", err)
 					}
-					return nil
+					dstHash, err := CalculateChecksum(c.dstFs, dst, opts.HashAlgorithm)
+					if err != nil {
+						return fmt.Errorf("failed to calculate destination hash: %w", err)
+					}
+
+					if srcHash == dstHash {
+						fmt.Println("Copier: Hashes match. File already fully copied.")
+						// Send completion progress
+						if progressChan != nil {
+							progressChan <- Progress{
+								BytesCopied: totalBytes,
+								TotalBytes:  totalBytes,
+								SourceHash:  srcHash,
+								DestHash:    dstHash,
+							}
+						}
+						return nil
+					}
+					return fmt.Errorf("destination exists with same size but different hash")
+				} else if dstInfo.Size() > totalBytes {
+					return fmt.Errorf("destination exists and is larger than source")
+				} else if !opts.Resume {
+					return fmt.Errorf("destination exists and overwrite is false")
 				}
 			}
 		}
@@ -191,7 +214,7 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 	if opts.CalculateHash {
 		if startOffset > 0 {
 			fmt.Println("Copier: Performing mandatory full re-hash for resume")
-			fullSourceHash, err := CalculateChecksum(src, opts.HashAlgorithm)
+			fullSourceHash, err := CalculateChecksum(c.srcFs, src, opts.HashAlgorithm)
 			if err != nil {
 				return fmt.Errorf("failed to calculate full source hash: %w", err)
 			}
