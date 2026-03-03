@@ -14,6 +14,7 @@ const (
 
 // FileInfo contains metadata and transfer status for a single file
 type FileInfo struct {
+	JobID        string         `json:"jobId"`
 	SourcePath   string         `json:"sourcePath"`
 	DestPath     string         `json:"destPath"`
 	Name         string         `json:"name"`

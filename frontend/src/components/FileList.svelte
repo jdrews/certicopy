@@ -206,7 +206,7 @@
         background-color: rgba(245, 158, 11, 0.15);
     }
     .row-success {
-        /* Optional: slight green tint or just default */
+        background-color: rgba(16, 185, 129, 0.15);
     }
 
     .col-icon {

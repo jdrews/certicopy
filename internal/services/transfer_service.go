@@ -53,8 +53,15 @@ func (s *TransferService) AddTransfer(sources []string, dest string) (string, er
 	}
 	fmt.Printf("Scanner found %d files, total size: %d\n", len(files), totalSize)
 
+	jobID := fmt.Sprintf("job_%d", time.Now().UnixNano())
+
+	// Set JobID on all files for easier tracking in frontend
+	for i := range files {
+		files[i].JobID = jobID
+	}
+
 	job := &models.TransferJob{
-		ID:          fmt.Sprintf("job_%d", time.Now().UnixNano()),
+		ID:          jobID,
 		Sources:     sources,
 		Destination: dest,
 		Status:      models.StatusPending,
@@ -260,29 +267,62 @@ func (s *TransferService) GetQueue() []*models.TransferJob {
 	return s.queue.GetAll()
 }
 
-func (s *TransferService) Pause() {
-	fmt.Println("Pause called")
-	if s.cancel != nil {
-		s.cancel()
-		job := s.queue.Peek()
-		if job != nil && job.Status == models.StatusInProgress {
-			job.Status = models.StatusPaused
-			for i := range job.Files {
-				if job.Files[i].Status == models.StatusInProgress {
-					job.Files[i].Status = models.StatusPaused
-					job.Files[i].ErrorMessage = "paused"
-				}
-			}
-			s.emitQueueUpdate()
-		}
+func (s *TransferService) Pause(jobID string) {
+	fmt.Printf("Pause called for job: %s\n", jobID)
+	job := s.findJob(jobID)
+	if job == nil {
+		return
+	}
+
+	if job.Status == models.StatusInProgress {
+		s.pauseActiveJob(job)
+	} else if job.Status == models.StatusPending {
+		s.pausePendingJob(job)
 	}
 }
 
-func (s *TransferService) Resume() {
-	fmt.Println("Resume called")
+func (s *TransferService) findJob(jobID string) *models.TransferJob {
+	if jobID == "" {
+		return s.queue.Peek()
+	}
+	for _, j := range s.queue.GetAll() {
+		if j.ID == jobID {
+			return j
+		}
+	}
+	return nil
+}
+
+func (s *TransferService) pauseActiveJob(job *models.TransferJob) {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	job.Status = models.StatusPaused
+	for i := range job.Files {
+		if job.Files[i].Status == models.StatusInProgress {
+			job.Files[i].Status = models.StatusPaused
+			job.Files[i].ErrorMessage = "paused"
+		}
+	}
+	s.emitQueueUpdate()
+}
+
+func (s *TransferService) pausePendingJob(job *models.TransferJob) {
+	job.Status = models.StatusPaused
+	s.emitQueueUpdate()
+}
+
+func (s *TransferService) Resume(jobID string) {
+	fmt.Printf("Resume called for job: %s\n", jobID)
 	jobs := s.queue.GetAll()
 	resumed := false
+
 	for _, job := range jobs {
+		// If jobID is provided, only resume that specific job
+		if jobID != "" && job.ID != jobID {
+			continue
+		}
+
 		if s.tryResumeJob(job) {
 			resumed = true
 		}
@@ -324,30 +364,44 @@ func (s *TransferService) tryResumeJob(job *models.TransferJob) bool {
 	return true
 }
 
-func (s *TransferService) Cancel() {
-	fmt.Println("Cancel called")
-	if s.cancel != nil {
-		s.cancel()
+func (s *TransferService) Cancel(jobID string) {
+	fmt.Printf("Cancel called for job: %s\n", jobID)
+	job := s.findJobToCancel(jobID)
+	if job != nil {
+		s.cancelSpecificJob(job)
 	}
+}
 
-	var jobToCancel *models.TransferJob
-	for _, job := range s.queue.GetAll() {
-		if job.Status == models.StatusInProgress || job.Status == models.StatusPaused || job.Status == models.StatusPending {
-			jobToCancel = job
-			break
-		}
-	}
-
-	if jobToCancel != nil {
-		jobToCancel.Status = models.StatusFailed
-		jobToCancel.Error = "cancelled"
-		for i := range jobToCancel.Files {
-			status := jobToCancel.Files[i].Status
-			if status == models.StatusInProgress || status == models.StatusPending || status == models.StatusPaused {
-				jobToCancel.Files[i].Status = models.StatusFailed
-				jobToCancel.Files[i].ErrorMessage = "cancelled"
+func (s *TransferService) findJobToCancel(jobID string) *models.TransferJob {
+	if jobID != "" {
+		for _, j := range s.queue.GetAll() {
+			if j.ID == jobID {
+				return j
 			}
 		}
-		s.emitQueueUpdate()
+		return nil
 	}
+	// Default legacy behavior
+	for _, j := range s.queue.GetAll() {
+		if j.Status == models.StatusInProgress || j.Status == models.StatusPaused || j.Status == models.StatusPending {
+			return j
+		}
+	}
+	return nil
+}
+
+func (s *TransferService) cancelSpecificJob(job *models.TransferJob) {
+	if job.Status == models.StatusInProgress && s.cancel != nil {
+		s.cancel()
+	}
+	job.Status = models.StatusFailed
+	job.Error = "cancelled"
+	for i := range job.Files {
+		status := job.Files[i].Status
+		if status == models.StatusInProgress || status == models.StatusPending || status == models.StatusPaused {
+			job.Files[i].Status = models.StatusFailed
+			job.Files[i].ErrorMessage = "cancelled"
+		}
+	}
+	s.emitQueueUpdate()
 }

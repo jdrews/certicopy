@@ -6,6 +6,7 @@ export type TransferStatus = 'pending' | 'in_progress' | 'success' | 'failed' | 
 export type FileStatus = TransferStatus | 'skipped';
 
 export interface FileInfo {
+  jobId: string;
   sourcePath: string;
   destPath: string;
   name: string;

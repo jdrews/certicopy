@@ -46,21 +46,19 @@ func (a *App) GetQueue() []*models.TransferJob {
 	return a.transferService.GetQueue()
 }
 
-// PauseTransfer pauses the current transfer
-func (a *App) PauseTransfer() {
-	// TODO: Implement pause logic
-	a.transferService.Pause()
+// PauseTransfer pauses the specified transfer
+func (a *App) PauseTransfer(jobID string) {
+	a.transferService.Pause(jobID)
 }
 
-// ResumeTransfer resumes the current transfer
-func (a *App) ResumeTransfer() {
-	// TODO: Implement resume logic
-	a.transferService.Resume()
+// ResumeTransfer resumes the specified transfer
+func (a *App) ResumeTransfer(jobID string) {
+	a.transferService.Resume(jobID)
 }
 
-// CancelTransfer cancels the current transfer
-func (a *App) CancelTransfer() {
-	a.transferService.Cancel()
+// CancelTransfer cancels the specified transfer
+func (a *App) CancelTransfer(jobID string) {
+	a.transferService.Cancel(jobID)
 }
 
 // SelectSource opens a dialog to select a source directory

@@ -65,13 +65,11 @@ class AppState {
   }
 
   updateFile(file: FileInfo) {
-    if (!file?.sourcePath) return;
+    if (!file?.sourcePath || !file?.jobId) return;
 
-    // Find which transfer this file belongs to
-    const transfer = this.transfers.find(t => {
-      const files = t.files ?? (t as any).Files ?? [];
-      return files.some((f: any) => f.sourcePath === file.sourcePath);
-    });
+    // Use jobId for unambiguous transfer lookup
+    const transferId = file.jobId;
+    const transfer = this.transfers.find(t => t.id === transferId);
 
     if (transfer) {
       const files = transfer.files ?? (transfer as any).Files;
@@ -149,19 +147,14 @@ class AppState {
     EventsOn("file:updated", (file: any) => {
       this.updateFile(file);
 
-      // Map file back to its job to update job-level metrics correctly
-      const job = this.transfers.find((j) => {
-        const files = j.files ?? (j as any).Files ?? [];
-        return files.some((f: any) => f.sourcePath === file.sourcePath);
-      });
-
-      if (job) {
+      const jobId = file.jobId;
+      if (jobId) {
         if (file.status === "in_progress") {
-          this.updateMetrics(job.id, { currentFile: file });
+          this.updateMetrics(jobId, { currentFile: file });
         } else {
-          const m = this.metrics[job.id];
+          const m = this.metrics[jobId];
           if (m?.currentFile?.sourcePath === file.sourcePath) {
-            this.updateMetrics(job.id, { currentFile: null });
+            this.updateMetrics(jobId, { currentFile: null });
           }
         }
       }

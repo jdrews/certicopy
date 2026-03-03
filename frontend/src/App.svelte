@@ -66,6 +66,27 @@
       console.error("Failed to add transfer:", e);
     }
   }
+
+  async function handlePause() {
+    if (appState.activeTransferId) {
+      await PauseTransfer(appState.activeTransferId);
+      loadQueue();
+    }
+  }
+
+  async function handleResume() {
+    if (appState.activeTransferId) {
+      await ResumeTransfer(appState.activeTransferId);
+      loadQueue();
+    }
+  }
+
+  async function handleCancel() {
+    if (appState.activeTransferId) {
+      await CancelTransfer(appState.activeTransferId);
+      loadQueue();
+    }
+  }
 </script>
 
 <main class="app-layout">
@@ -118,7 +139,7 @@
       <div class="action-bar">
         <div class="actions-left">
           {#if appState.activeTransfer?.status === "in_progress"}
-            <button class="btn btn-action" title="Pause" onclick={PauseTransfer}
+            <button class="btn btn-action" title="Pause" onclick={handlePause}
               >Pause</button
             >
           {/if}
@@ -126,14 +147,14 @@
             <button
               class="btn btn-action btn-success"
               title="Resume Transfer"
-              onclick={ResumeTransfer}>Resume</button
+              onclick={handleResume}>Resume</button
             >
           {/if}
           {#if appState.activeTransfer?.status === "in_progress" || appState.activeTransfer?.status === "pending" || appState.activeTransfer?.status === "paused"}
             <button
               class="btn btn-action btn-danger"
               title="Cancel Transfer"
-              onclick={CancelTransfer}>Cancel</button
+              onclick={handleCancel}>Cancel</button
             >
           {/if}
         </div>
