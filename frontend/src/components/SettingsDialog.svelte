@@ -1,33 +1,40 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    // Note: These imports will fail until 'wails dev' or 'wails build' is run to generate bindings
-    // We'll trust they will be generated correctly matching App.go
-    import { GetSettings, SaveSettings } from "../../wailsjs/go/main/App";
+    import * as App from "../../wailsjs/go/main/App";
 
     let { show = $bindable(false) } = $props<{ show?: boolean }>();
 
     let settings = $state({
-        theme: "dark",
-        defaultDestPath: "",
         hashAlgorithm: "xxhash",
-        bufferSize: 1048576, // 1MB (1024 * 1024)
-        showNotifications: true,
-        playSoundOnFinish: true,
-        autoVerify: true,
+        bufferSize: 1048576, // 1MB
     });
 
-    // While bindings are not generated, we might want to mock GetSettings/SaveSettings locally for UI dev
-    // or just rely on the fact that we will build soon.
+    const formattedBufferSize = $derived(() => {
+        const bytes = settings.bufferSize;
+        const kb = bytes / 1024;
+        let text = "";
+        if (kb >= 1024) {
+            text = (kb / 1024).toFixed(1) + " MB";
+        } else {
+            text = kb.toFixed(0) + " KB";
+        }
+
+        // Indicate default for 1MB
+        if (bytes === 1048576) {
+            text += " (Default)";
+        }
+        return text;
+    });
 
     onMount(async () => {
-        if (
-            window["go"] &&
-            window["go"]["main"] &&
-            window["go"]["main"]["App"]
-        ) {
+        const win = window as any;
+        if (win.go?.main?.App) {
             try {
-                const s = await GetSettings();
-                if (s) settings = s;
+                const s = await App.GetSettings();
+                if (s) {
+                    settings.hashAlgorithm = s.hashAlgorithm;
+                    settings.bufferSize = s.bufferSize;
+                }
             } catch (e) {
                 console.error("Failed to load settings:", e);
             }
@@ -37,7 +44,7 @@
     async function save() {
         try {
             settings.bufferSize = Number(settings.bufferSize);
-            await SaveSettings(settings);
+            await App.SaveSettings(settings as any);
             show = false;
         } catch (e) {
             console.error("Failed to save settings:", e);
@@ -50,22 +57,18 @@
 </script>
 
 {#if show}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="modal-backdrop" onclick={close}>
-        <div class="modal" stopPropagation.onclick>
+        <div class="modal" onclick={(e) => e.stopPropagation()}>
             <h2>Settings</h2>
 
             <div class="form-group">
-                <label for="theme">Theme</label>
-                <select id="theme" bind:value={settings.theme}>
-                    <option value="dark">Dark</option>
-                    <option value="light">Light</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="hash">Hash Algorithm</label>
+                <div class="label-row">
+                    <label for="hash">Hash Algorithm</label>
+                </div>
                 <select id="hash" bind:value={settings.hashAlgorithm}>
-                    <option value="xxhash">xxHash (Fastest)</option>
+                    <option value="xxhash">xxHash (Fastest, Default)</option>
                     <option value="blake2b">BLAKE2b (Secure & Fast)</option>
                     <option value="sha256">SHA-256 (Standard)</option>
                     <option value="md5">MD5 (Legacy)</option>
@@ -73,44 +76,23 @@
             </div>
 
             <div class="form-group">
-                <label for="buffer">Buffer Size (bytes)</label>
+                <div class="label-row">
+                    <label for="buffer">Buffer Size</label>
+                    <span class="value">{formattedBufferSize()}</span>
+                </div>
                 <input
                     id="buffer"
-                    type="number"
+                    type="range"
+                    min="65536"
+                    max="16777216"
+                    step="65536"
                     bind:value={settings.bufferSize}
                 />
             </div>
 
-            <div class="form-group checkbox">
-                <input
-                    type="checkbox"
-                    id="notify"
-                    bind:checked={settings.showNotifications}
-                />
-                <label for="notify">Show Notifications</label>
-            </div>
-
-            <div class="form-group checkbox">
-                <input
-                    type="checkbox"
-                    id="sound"
-                    bind:checked={settings.playSoundOnFinish}
-                />
-                <label for="sound">Play Sound on Finish</label>
-            </div>
-
-            <div class="form-group checkbox">
-                <input
-                    type="checkbox"
-                    id="verify"
-                    bind:checked={settings.autoVerify}
-                />
-                <label for="verify">Auto-Verify After Copy</label>
-            </div>
-
             <div class="actions">
                 <button class="btn-cancel" onclick={close}>Cancel</button>
-                <button class="btn-save" onclick={save}>Save</button>
+                <button class="btn-save" onclick={save}>Save Changes</button>
             </div>
         </div>
     </div>
@@ -123,87 +105,146 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(0, 0, 0, 0.7);
         display: flex;
         justify-content: center;
         align-items: center;
         z-index: 1000;
+        backdrop-filter: blur(4px);
     }
     .modal {
         background: var(--bg-secondary);
         color: var(--text-primary);
-        padding: 20px;
-        border-radius: 5px;
+        padding: 24px;
+        border-radius: 8px;
         width: 400px;
         border: 1px solid var(--border-color);
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
     }
     h2 {
         margin-top: 0;
+        margin-bottom: 24px;
         border-bottom: 1px solid var(--border-color);
-        padding-bottom: 10px;
-        font-size: 18px;
+        padding-bottom: 12px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
     }
     .form-group {
-        margin-bottom: 15px;
+        margin-bottom: 28px;
+    }
+    .label-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        height: 20px;
     }
     label {
         display: block;
-        margin-bottom: 5px;
-        font-weight: 500;
-        font-size: 13px;
+        font-weight: 600;
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
-    input[type="text"],
-    input[type="number"],
+    .value {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--text-primary);
+        background: var(--bg-tertiary);
+        padding: 2px 8px;
+        border-radius: 4px;
+        border: 1px solid var(--border-color);
+    }
+
     select {
         width: 100%;
-        padding: 8px;
+        padding: 10px 12px;
         background: var(--bg-tertiary);
-        color: var(--text-primary);
+        color: var(--text-primary) !important;
         border: 1px solid var(--border-color);
-        border-radius: 3px;
-        font-size: 13px;
-    }
-    .checkbox {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    .checkbox input {
-        width: auto;
-    }
-    .checkbox label {
-        margin-bottom: 0;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        outline: none;
+        appearance: none;
         cursor: pointer;
+        transition: border-color 0.2s;
+    }
+
+    select option {
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        padding: 10px;
+    }
+
+    select:focus {
+        border-color: var(--text-secondary);
+    }
+
+    input[type="range"] {
+        width: 100%;
+        height: 4px;
+        background: var(--bg-tertiary);
+        border-radius: 2px;
+        outline: none;
+        cursor: pointer;
+        appearance: none;
+        margin: 10px 0;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        background: #888;
+        border: 2px solid var(--bg-secondary);
+        border-radius: 50%;
+        cursor: pointer;
+        transition:
+            transform 0.1s ease,
+            background 0.2s;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+        transform: scale(1.2);
+        background: #bbb;
     }
 
     .actions {
         display: flex;
         justify-content: flex-end;
-        gap: 10px;
-        margin-top: 20px;
+        gap: 12px;
+        margin-top: 36px;
     }
     button {
-        padding: 6px 16px;
-        border-radius: 3px;
+        padding: 8px 24px;
+        border-radius: 4px;
         cursor: pointer;
-        border: none;
-        font-size: 13px;
+        border: 1px solid var(--border-color);
+        font-size: 0.85rem;
+        font-weight: 600;
+        transition: all 0.2s;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
     .btn-cancel {
         background: transparent;
         color: var(--text-secondary);
-        border: 1px solid var(--border-color);
     }
     .btn-cancel:hover {
-        background: var(--bg-tertiary);
+        background: rgba(255, 255, 255, 0.05);
         color: var(--text-primary);
     }
     .btn-save {
-        background: var(--accent-color);
-        color: white;
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
     }
     .btn-save:hover {
-        filter: brightness(1.1);
+        background: #444;
+        border-color: #666;
     }
 </style>
