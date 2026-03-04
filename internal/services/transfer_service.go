@@ -15,25 +15,27 @@ import (
 
 // TransferService orchestrates transfer jobs
 type TransferService struct {
-	queue   *core.TransferQueue
-	copier  *core.Copier
-	scanner *core.Scanner
-	fs      afero.Fs
-	ctx     context.Context // Wails runtime context
-	running bool
-	cancel  context.CancelFunc
+	queue           *core.TransferQueue
+	copier          *core.Copier
+	scanner         *core.Scanner
+	fs              afero.Fs
+	settingsService *SettingsService
+	ctx             context.Context // Wails runtime context
+	running         bool
+	cancel          context.CancelFunc
 }
 
 // NewTransferService creates a new TransferService
-func NewTransferService() *TransferService {
+func NewTransferService(settings *SettingsService) *TransferService {
 	// Use OS filesystem for actual operations
 	fs := afero.NewOsFs()
 
 	return &TransferService{
-		queue:   core.NewTransferQueue(),
-		copier:  core.NewCopier(fs, fs),
-		scanner: core.NewScanner(fs),
-		fs:      fs,
+		queue:           core.NewTransferQueue(),
+		copier:          core.NewCopier(fs, fs),
+		scanner:         core.NewScanner(fs),
+		fs:              fs,
+		settingsService: settings,
 	}
 }
 
@@ -162,10 +164,16 @@ func (s *TransferService) processFile(ctx context.Context, job *models.TransferJ
 	s.emitFileUpdate(file)
 	s.emitQueueUpdate()
 
+	settings := s.settingsService.Get()
+	bufferSize := settings.BufferSize
+	if bufferSize == 0 {
+		bufferSize = 1024 * 1024
+	}
+
 	opts := core.CopyOptions{
-		BufferSize:    1024 * 1024,
+		BufferSize:    bufferSize,
 		CalculateHash: true,
-		HashAlgorithm: core.HashXXHash,
+		HashAlgorithm: core.HashAlgorithm(settings.HashAlgorithm),
 		Overwrite:     job.Overwrite,
 		Resume:        true,
 		PreservePerms: true,

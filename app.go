@@ -20,9 +20,10 @@ type App struct {
 
 // NewApp creates a new App application struct
 func NewApp() *App {
+	settings := services.NewSettingsService()
 	return &App{
-		transferService: services.NewTransferService(),
-		settingsService: services.NewSettingsService(),
+		transferService: services.NewTransferService(settings),
+		settingsService: settings,
 	}
 }
 
@@ -39,6 +40,20 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) processCLITransfers() {
 	transfers := viper.GetStringSlice("transfer")
 	overwrite := viper.GetBool("overwrite")
+	hashAlgo := viper.GetString("hash")
+	bufferSizeKB := viper.GetInt("buffer")
+
+	// Apply CLI overrides to settings if provided
+	if hashAlgo != "" || bufferSizeKB > 0 {
+		settings := a.settingsService.Get()
+		if hashAlgo != "" {
+			settings.HashAlgorithm = hashAlgo
+		}
+		if bufferSizeKB > 0 {
+			settings.BufferSize = bufferSizeKB * 1024
+		}
+		a.settingsService.Save(settings)
+	}
 
 	for _, t := range transfers {
 		parts := strings.Split(t, ":")
