@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/jdrews/certicopy/internal/core"
 	"github.com/jdrews/certicopy/internal/models"
+	"github.com/sirupsen/logrus"
 )
 
 // SettingsService handles loading and saving application settings
@@ -45,10 +47,15 @@ func (s *SettingsService) Load() error {
 	data, err := os.ReadFile(s.configPath)
 	if err != nil {
 		// If file doesn't exist, we just stick with defaults
+		core.Log.WithField("path", s.configPath).Info("No settings file found, using defaults")
 		return err
 	}
 
-	return json.Unmarshal(data, s.settings)
+	if err := json.Unmarshal(data, s.settings); err != nil {
+		return err
+	}
+	core.Log.WithField("path", s.configPath).Info("Settings loaded from disk")
+	return nil
 }
 
 // Save writes settings to disk
@@ -57,6 +64,10 @@ func (s *SettingsService) Save(settings *models.Settings) error {
 	defer s.mutex.Unlock()
 
 	s.settings = settings
+	core.Log.WithFields(logrus.Fields{
+		"hashAlgo":   settings.HashAlgorithm,
+		"bufferSize": settings.BufferSize,
+	}).Info("Settings saved")
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
 		return err

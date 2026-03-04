@@ -6,6 +6,7 @@ toolchain go1.24.10
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
+	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/afero v1.15.0
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0

@@ -9,6 +9,7 @@ import (
 
 	"github.com/jdrews/certicopy/internal/core"
 	"github.com/jdrews/certicopy/internal/models"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -46,14 +47,20 @@ func (s *TransferService) SetContext(ctx context.Context) {
 
 // AddTransfer adds a new transfer job to the queue
 func (s *TransferService) AddTransfer(sources []string, dest string, overwrite bool) (string, error) {
-	fmt.Printf("AddTransfer called with sources: %v, dest: %s\n", sources, dest)
+	core.Log.WithFields(logrus.Fields{
+		"sources": sources,
+		"dest":    dest,
+	}).Debug("AddTransfer request received")
 	// Scan sources
 	files, _, totalSize, err := s.scanner.Scan(sources, dest)
 	if err != nil {
-		fmt.Printf("Scanner.Scan failed: %v\n", err)
+		core.Log.WithError(err).Error("Scanner.Scan failed")
 		return "", err
 	}
-	fmt.Printf("Scanner found %d files, total size: %d\n", len(files), totalSize)
+	core.Log.WithFields(logrus.Fields{
+		"fileCount": len(files),
+		"totalSize": totalSize,
+	}).Info("Sources scanned")
 
 	jobID := fmt.Sprintf("job_%d", time.Now().UnixNano())
 
@@ -76,15 +83,15 @@ func (s *TransferService) AddTransfer(sources []string, dest string, overwrite b
 
 	s.queue.Add(job)
 	s.emitQueueUpdate()
-	fmt.Println("Job added to queue and update emitted")
+	core.Log.WithField("jobId", job.ID).Debug("Job added to queue")
 	return job.ID, nil
 }
 
 // StartQueue starts processing the queue
 func (s *TransferService) StartQueue() {
-	fmt.Println("StartQueue called")
+	core.Log.Debug("StartQueue called")
 	if s.running {
-		fmt.Println("StartQueue: already running")
+		core.Log.Debug("StartQueue: already running")
 		return
 	}
 	s.running = true
@@ -92,9 +99,9 @@ func (s *TransferService) StartQueue() {
 }
 
 func (s *TransferService) processQueue() {
-	fmt.Println("processQueue started")
+	core.Log.Debug("processQueue started")
 	defer func() {
-		fmt.Println("processQueue stopping")
+		core.Log.Debug("processQueue stopping")
 		s.running = false
 	}()
 
@@ -102,7 +109,7 @@ func (s *TransferService) processQueue() {
 		// Get next pending job (simple Peek for now, assuming only one consumer)
 		job := s.queue.Peek()
 		if job == nil {
-			fmt.Println("processQueue: Queue empty")
+			core.Log.Debug("processQueue: Queue empty")
 			return // Queue empty
 		}
 
@@ -114,7 +121,10 @@ func (s *TransferService) processQueue() {
 
 // processJob handles the transfer of a single job
 func (s *TransferService) processJob(job *models.TransferJob) bool {
-	fmt.Printf("Processing job %s with %d files\n", job.ID, len(job.Files))
+	core.Log.WithFields(logrus.Fields{
+		"jobId":     job.ID,
+		"fileCount": len(job.Files),
+	}).Info("Processing transfer job")
 
 	// Update job status
 	job.Status = models.StatusInProgress
@@ -157,7 +167,10 @@ func (s *TransferService) processJob(job *models.TransferJob) bool {
 
 // processFile handles copying a single file within a job
 func (s *TransferService) processFile(ctx context.Context, job *models.TransferJob, file *models.FileInfo) error {
-	fmt.Printf("processFile: %s\n", file.Name)
+	core.Log.WithFields(logrus.Fields{
+		"jobId": job.ID,
+		"file":  file.Name,
+	}).Debug("Processing file")
 
 	file.Status = models.StatusInProgress
 	file.ErrorMessage = "in progress"
@@ -253,7 +266,6 @@ func (s *TransferService) finalizeJobStatus(job *models.TransferJob) {
 
 func (s *TransferService) emitQueueUpdate() {
 	if s.ctx == nil {
-		fmt.Println("emitQueueUpdate: context is nil, cannot emit")
 		return
 	}
 	runtime.EventsEmit(s.ctx, "queue:updated", s.queue.GetAll())
@@ -281,7 +293,7 @@ func (s *TransferService) GetQueue() []*models.TransferJob {
 }
 
 func (s *TransferService) Pause(jobID string) {
-	fmt.Printf("Pause called for job: %s\n", jobID)
+	core.Log.WithField("jobId", jobID).Info("Pause called for job")
 	job := s.findJob(jobID)
 	if job == nil {
 		return
@@ -326,7 +338,7 @@ func (s *TransferService) pausePendingJob(job *models.TransferJob) {
 }
 
 func (s *TransferService) Resume(jobID string) {
-	fmt.Printf("Resume called for job: %s\n", jobID)
+	core.Log.WithField("jobId", jobID).Info("Resume called for job")
 	jobs := s.queue.GetAll()
 	resumed := false
 
@@ -378,7 +390,7 @@ func (s *TransferService) tryResumeJob(job *models.TransferJob) bool {
 }
 
 func (s *TransferService) Cancel(jobID string) {
-	fmt.Printf("Cancel called for job: %s\n", jobID)
+	core.Log.WithField("jobId", jobID).Info("Cancel called for job")
 	job := s.findJobToCancel(jobID)
 	if job != nil {
 		s.cancelSpecificJob(job)

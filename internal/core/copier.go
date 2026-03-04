@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 )
 
@@ -63,7 +64,11 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 	if progressChan != nil {
 		defer close(progressChan)
 	}
-	fmt.Printf("Copier: Start copying %s to %s (Resume: %v)\n", src, dst, opts.Resume)
+	Log.WithFields(logrus.Fields{
+		"src":    src,
+		"dst":    dst,
+		"resume": opts.Resume,
+	}).Info("Starting file copy")
 
 	// ## Open source file
 	srcFile, err := c.srcFs.Open(src)
@@ -90,10 +95,13 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 				if opts.Resume && dstInfo.Size() < totalBytes {
 					startOffset = dstInfo.Size()
 					isAppending = true
-					fmt.Printf("Copier: Resuming at offset %d\n", startOffset)
+					Log.WithField("offset", startOffset).Info("Resuming copy at offset")
 				} else if dstInfo.Size() == totalBytes {
 					// Leaning on hash results to know if a file has been fully transferred
-					fmt.Println("Copier: File sizes match. Calculating hashes for verification...")
+					Log.WithFields(logrus.Fields{
+						"path": dst,
+						"size": totalBytes,
+					}).Info("File sizes match, verifying hashes...")
 					srcHash, err := CalculateChecksum(c.srcFs, src, opts.HashAlgorithm)
 					if err != nil {
 						return fmt.Errorf("failed to calculate source hash: %w", err)
@@ -104,7 +112,7 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 					}
 
 					if srcHash == dstHash {
-						fmt.Println("Copier: Hashes match. File already fully copied.")
+						Log.WithField("path", dst).Info("Hashes match, file already fully copied")
 						// Send completion progress
 						if progressChan != nil {
 							progressChan <- Progress{
@@ -213,7 +221,7 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 	// ## Verification Logic: If we resumed, we MUST re-hash the source file fully
 	if opts.CalculateHash {
 		if startOffset > 0 {
-			fmt.Println("Copier: Performing mandatory full re-hash for resume")
+			Log.WithField("path", src).Info("Performing mandatory full re-hash for resumed file")
 			fullSourceHash, err := CalculateChecksum(c.srcFs, src, opts.HashAlgorithm)
 			if err != nil {
 				return fmt.Errorf("failed to calculate full source hash: %w", err)

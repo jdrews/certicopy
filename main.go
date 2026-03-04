@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/jdrews/certicopy/internal/core"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/wailsapp/wails/v2"
@@ -22,7 +23,14 @@ func main() {
 	pflag.BoolP("overwrite", "o", false, "Overwrite existing files at destination")
 	pflag.StringP("hash", "a", "", "Hash algorithm to use (xxhash, blake2b, sha256, md5). Default: xxhash")
 	pflag.IntP("buffer", "b", 0, "Buffer size in kilobytes (e.g. 1024 for 1MB). Default: 1MB")
+	pflag.StringP("logfile", "l", "", "Path to log file (e.g. certicopy.log)")
 	pflag.Parse()
+
+	// Initialize Logger
+	logFile, _ := pflag.CommandLine.GetString("logfile")
+	if err := core.InitLogger(logFile); err != nil {
+		fmt.Printf("Failed to initialize logger: %v\n", err)
+	}
 
 	if *help {
 		fmt.Fprintf(os.Stderr, "CertiCopy - Secure File Transfer with Integrity Verification\n\n")

@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
+	"github.com/jdrews/certicopy/internal/core"
 	"github.com/jdrews/certicopy/internal/models"
 	"github.com/jdrews/certicopy/internal/services"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -33,6 +34,13 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.transferService.SetContext(ctx)
 
+	settings := a.settingsService.Get()
+	core.Log.WithFields(logrus.Fields{
+		"version":    "v1.0.0",
+		"bufferSize": settings.BufferSize,
+		"hashAlgo":   settings.HashAlgorithm,
+	}).Info("CertiCopy starting")
+
 	// Process CLI transfers if any
 	a.processCLITransfers()
 }
@@ -58,13 +66,22 @@ func (a *App) processCLITransfers() {
 	for _, t := range transfers {
 		parts := strings.Split(t, ":")
 		if len(parts) != 2 {
-			fmt.Printf("Invalid transfer format: %s. Expected src:dst\n", t)
+			core.Log.WithField("input", t).Error("Invalid transfer format. Expected src:dst")
 			continue
 		}
 		src, dst := parts[0], parts[1]
 		_, err := a.transferService.AddTransfer([]string{src}, dst, overwrite)
 		if err != nil {
-			fmt.Printf("Failed to add CLI transfer %s -> %s: %v\n", src, dst, err)
+			core.Log.WithFields(logrus.Fields{
+				"src":   src,
+				"dst":   dst,
+				"error": err,
+			}).Error("Failed to add CLI transfer")
+		} else {
+			core.Log.WithFields(logrus.Fields{
+				"src": src,
+				"dst": dst,
+			}).Info("Added CLI transfer to queue")
 		}
 	}
 
@@ -109,14 +126,14 @@ func (a *App) SelectSource() ([]string, error) {
 		Title: "Select Source Directory",
 	})
 	if err != nil {
-		fmt.Printf("SelectSource error: %v\n", err)
+		core.Log.WithError(err).Error("SelectSource error")
 		return nil, err
 	}
 	if selection == "" {
-		fmt.Println("SelectSource cancelled")
+		core.Log.Info("SelectSource cancelled")
 		return nil, nil // API expects empty/nil if cancelled
 	}
-	fmt.Printf("SelectSource selected: %s\n", selection)
+	core.Log.WithField("path", selection).Info("Source directory selected")
 	return []string{selection}, nil
 }
 
@@ -126,14 +143,14 @@ func (a *App) SelectDestination() (string, error) {
 		Title: "Select Destination Directory",
 	})
 	if err != nil {
-		fmt.Printf("SelectDestination error: %v\n", err)
+		core.Log.WithError(err).Error("SelectDestination error")
 		return "", err
 	}
 	if selection == "" {
-		fmt.Println("SelectDestination cancelled")
+		core.Log.Info("SelectDestination cancelled")
 		return "", nil // API expects empty string if cancelled
 	}
-	fmt.Printf("SelectDestination selected: %s\n", selection)
+	core.Log.WithField("path", selection).Info("Destination directory selected")
 	return selection, nil
 }
 
