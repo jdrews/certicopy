@@ -251,6 +251,13 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 		}
 	}
 
+	// ## Post-copy verification
+	if opts.CalculateHash && hashResult != "" && destHashResult != "" {
+		if hashResult != destHashResult {
+			return fmt.Errorf("checksum mismatch after copy: source %s, dest %s", hashResult, destHashResult)
+		}
+	}
+
 	// ## Preserve Metadata
 	if opts.PreservePerms {
 		if err := c.dstFs.Chmod(dst, srcInfo.Mode()); err != nil {
