@@ -299,10 +299,16 @@ func (s *TransferService) Pause(jobID string) {
 		return
 	}
 
-	if job.Status == models.StatusInProgress {
+	switch job.Status {
+	case models.StatusInProgress:
 		s.pauseActiveJob(job)
-	} else if job.Status == models.StatusPending {
+	case models.StatusPending:
 		s.pausePendingJob(job)
+	default:
+		core.Log.WithFields(logrus.Fields{
+			"jobId":  job.ID,
+			"status": job.Status,
+		}).Warn("Cannot pause job in status")
 	}
 }
 
