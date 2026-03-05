@@ -7,6 +7,7 @@
   import TransferGraph from "./components/TransferGraph.svelte";
   import FileList from "./components/FileList.svelte";
   import SettingsDialog from "./components/SettingsDialog.svelte";
+  import NewTransferModal from "./components/NewTransferModal.svelte";
   import "./styles/main.css";
 
   // Import Wails runtime
@@ -24,6 +25,7 @@
   import { appState } from "./lib/state.svelte";
 
   let showSettings = $state(false);
+  let showNewTransfer = $state(false);
 
   // Actions
   onMount(() => {
@@ -49,15 +51,14 @@
 
   // --- Actions ---
 
-  async function addNewTransfer() {
+  function addNewTransfer() {
+    showNewTransfer = true;
+  }
+
+  async function handleStartTransfer(source: string, destination: string) {
     try {
-      const sources = await SelectSource();
-      if (!sources || sources.length === 0) return;
-
-      const dest = await SelectDestination();
-      if (!dest) return;
-
-      await AddTransferToQueue(sources, dest, false);
+      showNewTransfer = false;
+      await AddTransferToQueue([source], destination, false);
       console.log("Transfer added to queue");
       StartQueue();
       console.log("StartQueue called");
@@ -169,6 +170,13 @@
 
   <!-- Settings Dialog -->
   <SettingsDialog bind:show={showSettings} />
+
+  <!-- New Transfer Modal -->
+  <NewTransferModal
+    show={showNewTransfer}
+    onclose={() => (showNewTransfer = false)}
+    onstart={handleStartTransfer}
+  />
 </main>
 
 <style>
