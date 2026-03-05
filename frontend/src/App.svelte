@@ -93,22 +93,24 @@
 <main class="app-layout">
   <!-- Left Sidebar -->
   <aside class="app-sidebar">
-    <TransferQueue
-      queue={appState.transfers}
-      activeTransfer={appState.activeTransfer}
-      onselect={handleTransferSelect}
-    />
-    <!-- Debug Add Button & Settings -->
-    <div style="padding: 10px; display: flex; gap: 5px;">
-      <button
-        onclick={addNewTransfer}
-        style="flex: 1; padding: 5px; opacity: 0.8; font-weight: bold;"
-        >+ New Transfer</button
-      >
+    <div class="sidebar-header">
+      <button class="btn btn-primary new-transfer-btn" onclick={addNewTransfer}>
+        + New Transfer
+      </button>
+    </div>
 
+    <div class="queue-container">
+      <TransferQueue
+        queue={appState.transfers}
+        activeTransfer={appState.activeTransfer}
+        onselect={handleTransferSelect}
+      />
+    </div>
+
+    <div class="sidebar-footer">
       <button
         onclick={() => (showSettings = true)}
-        style="padding: 5px 10px; opacity: 0.5;"
+        class="icon-btn settings-btn"
         title="Settings">⚙</button
       >
     </div>
@@ -196,6 +198,44 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    border-right: 1px solid var(--border-color);
+  }
+
+  .sidebar-header {
+    padding: var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .new-transfer-btn {
+    width: 100%;
+    padding: 10px;
+    border-radius: 6px;
+    font-weight: 600;
+  }
+
+  .queue-container {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .sidebar-footer {
+    padding: var(--spacing-md);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .settings-btn {
+    font-size: 20px;
+    padding: 6px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+  }
+
+  .settings-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
   }
 
   .main-content {

@@ -1,17 +1,17 @@
 :root {
-    /* Dark Theme Colors */
-    --bg-primary: #1e1e1e;
-    --bg-secondary: #252526;
-    --bg-tertiary: #333333;
-    --text-primary: #cccccc;
-    --text-secondary: #aaaaaa;
-    --accent-color: #007acc;
-    --accent-hover: #005f9e;
-    --border-color: #404040;
-    --success-color: #4ec9b0;
-    --warning-color: #dcdcaa;
-    --error-color: #f44747;
-    --info-color: #9cdcfe;
+    /* Balanced Professional Dark Theme */
+    --bg-primary: #141414;
+    --bg-secondary: #1e1e1e;
+    --bg-tertiary: #2d2d2d;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --accent-color: #4a6572; /* Muted slate blue */
+    --accent-hover: #5d7c8a;
+    --border-color: rgba(255, 255, 255, 0.08); /* Faint border */
+    --success-color: #4caf50;
+    --warning-color: #ff9800;
+    --error-color: #f44336;
+    --info-color: #2196f3;
 
     /* Spacing */
     --spacing-xs: 4px;
@@ -53,8 +53,28 @@ button {
     font-family: inherit;
     cursor: pointer;
     border: none;
-    border-radius: 4px;
-    transition: background-color 0.2s;
+    border-radius: 6px; /* Soften geometry */
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.btn-primary {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: var(--accent-hover);
+}
+
+.btn-secondary {
+    background-color: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+    background-color: var(--bg-tertiary);
+    color: white;
 }
 
 /* Scrollbar Styling */
