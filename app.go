@@ -52,13 +52,16 @@ func (a *App) processCLITransfers() {
 	bufferSizeKB := viper.GetInt("buffer")
 
 	// Apply CLI overrides to settings if provided
-	if hashAlgo != "" || bufferSizeKB > 0 {
+	if hashAlgo != "" || bufferSizeKB > 0 || overwrite {
 		settings := a.settingsService.Get()
 		if hashAlgo != "" {
 			settings.HashAlgorithm = hashAlgo
 		}
 		if bufferSizeKB > 0 {
 			settings.BufferSize = bufferSizeKB * 1024
+		}
+		if overwrite {
+			settings.Overwrite = true
 		}
 		a.settingsService.Save(settings)
 	}

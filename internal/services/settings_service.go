@@ -67,6 +67,7 @@ func (s *SettingsService) Save(settings *models.Settings) error {
 	core.Log.WithFields(logrus.Fields{
 		"hashAlgo":   settings.HashAlgorithm,
 		"bufferSize": settings.BufferSize,
+		"overwrite":  settings.Overwrite,
 	}).Info("Settings saved")
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {

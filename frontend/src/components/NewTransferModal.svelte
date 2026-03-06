@@ -5,19 +5,32 @@
     interface Props {
         show: boolean;
         onclose: () => void;
-        onstart: (source: string, destination: string) => void;
+        onstart: (
+            source: string,
+            destination: string,
+            overwrite: boolean,
+        ) => void;
     }
 
     let { show, onclose, onstart } = $props();
 
     let sourcePath = $state("");
     let destPath = $state("");
+    let overwrite = $state(false);
 
     let sourceZone: HTMLElement | undefined = $state();
     let destZone: HTMLElement | undefined = $state();
 
     $effect(() => {
         if (show) {
+            // Load default overwrite from settings
+            import("../../wailsjs/go/main/App").then(async (App) => {
+                const s = await App.GetSettings();
+                if (s) {
+                    overwrite = s.overwrite;
+                }
+            });
+
             const cleanup = EventsOn(
                 "wails:file-drop",
                 (x: number, y: number, paths: string[]) => {
@@ -67,7 +80,7 @@
 
     function handleStart() {
         if (sourcePath && destPath) {
-            onstart(sourcePath, destPath);
+            onstart(sourcePath, destPath, overwrite);
             reset();
         }
     }
@@ -77,17 +90,23 @@
         onclose();
     }
 
-    function reset() {
+    async function reset() {
         sourcePath = "";
         destPath = "";
+        try {
+            const App = await import("../../wailsjs/go/main/App");
+            const s = await App.GetSettings();
+            overwrite = s ? s.overwrite : false;
+        } catch (e) {
+            overwrite = false;
+        }
     }
 
-    // Handle drop events
     function handleDrop(event: DragEvent, type: "source" | "dest") {
         event.preventDefault();
         const files = event.dataTransfer?.files;
         if (files && files.length > 0) {
-            console.log("Dropped file:", files[0].name);
+            console.log(`Dropped into ${type}:`, files[0].name);
         }
     }
 
@@ -210,6 +229,19 @@
                                 <p>Click or drop destination folder here</p>
                             {/if}
                         </div>
+                    </div>
+                </div>
+
+                <div class="transfer-options">
+                    <div class="option-item">
+                        <input
+                            id="modal-overwrite"
+                            type="checkbox"
+                            bind:checked={overwrite}
+                        />
+                        <label for="modal-overwrite"
+                            >Overwrite destination files if they exist</label
+                        >
                     </div>
                 </div>
             </div>
@@ -423,6 +455,28 @@
         font-family: "Courier New", Courier, monospace;
         font-size: var(--font-size-sm);
         color: var(--text-primary);
+    }
+
+    .transfer-options {
+        margin-top: var(--spacing-lg);
+        padding-top: var(--spacing-md);
+        border-top: 1px solid var(--border-color);
+    }
+
+    .option-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .option-item label {
+        color: var(--text-secondary);
+        font-size: var(--font-size-sm);
+        cursor: pointer;
+    }
+
+    .option-item input[type="checkbox"] {
+        cursor: pointer;
     }
 
     .modal-footer {

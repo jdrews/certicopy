@@ -7,6 +7,7 @@
     let settings = $state({
         hashAlgorithm: "xxhash",
         bufferSize: 1048576, // 1MB
+        overwrite: false,
     });
 
     const formattedBufferSize = $derived(() => {
@@ -34,6 +35,7 @@
                 if (s) {
                     settings.hashAlgorithm = s.hashAlgorithm;
                     settings.bufferSize = s.bufferSize;
+                    settings.overwrite = s.overwrite;
                 }
             } catch (e) {
                 console.error("Failed to load settings:", e);
@@ -73,6 +75,17 @@
                     <option value="sha256">SHA-256 (Standard)</option>
                     <option value="md5">MD5 (Legacy)</option>
                 </select>
+            </div>
+
+            <div class="form-group checkbox-group">
+                <input
+                    id="overwrite"
+                    type="checkbox"
+                    bind:checked={settings.overwrite}
+                />
+                <label for="overwrite"
+                    >Overwrite destination files if they exist</label
+                >
             </div>
 
             <div class="form-group">
@@ -134,6 +147,19 @@
     }
     .form-group {
         margin-bottom: 28px;
+    }
+    .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .checkbox-group input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+    .checkbox-group label {
+        margin-bottom: 0;
     }
     .label-row {
         display: flex;

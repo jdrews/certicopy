@@ -55,10 +55,14 @@
     showNewTransfer = true;
   }
 
-  async function handleStartTransfer(source: string, destination: string) {
+  async function handleStartTransfer(
+    source: string,
+    destination: string,
+    overwrite: boolean,
+  ) {
     try {
       showNewTransfer = false;
-      await AddTransferToQueue([source], destination, false);
+      await AddTransferToQueue([source], destination, overwrite);
       console.log("Transfer added to queue");
       StartQueue();
       console.log("StartQueue called");
