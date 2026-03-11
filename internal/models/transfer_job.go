@@ -15,6 +15,7 @@ type TransferJob struct {
 	StartedAt   int64          `json:"startedAt"`   // Unix milliseconds
 	CompletedAt int64          `json:"completedAt"` // Unix milliseconds
 	Error       string         `json:"error,omitempty"`
+	ErrorCode   string         `json:"errorCode,omitempty"`
 }
 
 // Stats returns the current statistics for the job

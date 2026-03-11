@@ -18,12 +18,19 @@
 
     <div class="transfer-list">
         {#each queue as transfer}
-            <div
+            <button
+                type="button"
                 class="transfer-item {activeTransfer &&
                 activeTransfer.id === transfer.id
                     ? 'selected'
                     : ''}"
                 onclick={() => selectTransfer(transfer)}
+                onkeydown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        selectTransfer(transfer);
+                    }
+                }}
             >
                 <div class="transfer-icon">
                     {#if transfer.status === "in_progress"}
@@ -67,8 +74,16 @@
                             >
                         {/if}
                     </div>
+                    {#if transfer.error}
+                        <div class="transfer-error" title={transfer.error}>
+                            <span class="error-badge"
+                                >{transfer.errorCode || "Error"}</span
+                            >
+                            {transfer.error}
+                        </div>
+                    {/if}
                 </div>
-            </div>
+            </button>
         {/each}
         {#if queue.length === 0}
             <div class="empty-state">No transfers</div>
@@ -104,7 +119,13 @@
     .transfer-item {
         display: flex;
         padding: 10px 15px;
+        border: none;
         border-bottom: 1px solid var(--border-color);
+        background: transparent;
+        width: 100%;
+        text-align: left;
+        font: inherit;
+        color: inherit;
         cursor: pointer;
         transition: background-color 0.2s;
     }
@@ -176,6 +197,28 @@
         text-align: center;
         color: var(--text-secondary);
         font-size: var(--font-size-sm);
+    }
+
+    .transfer-error {
+        margin-top: 4px;
+        font-size: 10px;
+        color: var(--error-color);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .error-badge {
+        background-color: rgba(244, 71, 71, 0.2);
+        color: var(--error-color);
+        padding: 1px 4px;
+        border-radius: 3px;
+        font-size: 9px;
+        font-weight: bold;
+        border: 1px solid rgba(244, 71, 71, 0.4);
     }
 
     @keyframes spin {

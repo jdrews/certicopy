@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jdrews/certicopy/internal/models"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 )
@@ -73,14 +74,14 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 	// ## Open source file
 	srcFile, err := c.srcFs.Open(src)
 	if err != nil {
-		return fmt.Errorf("failed to open source: %w", err)
+		return MapError(err, src, "failed to open source")
 	}
 	defer srcFile.Close()
 
 	// ## Get source info
 	srcInfo, err := srcFile.Stat()
 	if err != nil {
-		return fmt.Errorf("failed to stat source: %w", err)
+		return MapError(err, src, "failed to stat source")
 	}
 	totalBytes := srcInfo.Size()
 
@@ -104,11 +105,11 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 					}).Info("File sizes match, verifying hashes...")
 					srcHash, err := CalculateChecksum(c.srcFs, src, opts.HashAlgorithm)
 					if err != nil {
-						return fmt.Errorf("failed to calculate source hash: %w", err)
+						return MapError(err, src, "failed to calculate source hash")
 					}
 					dstHash, err := CalculateChecksum(c.dstFs, dst, opts.HashAlgorithm)
 					if err != nil {
-						return fmt.Errorf("failed to calculate destination hash: %w", err)
+						return MapError(err, dst, "failed to calculate destination hash")
 					}
 
 					if srcHash == dstHash {
@@ -124,11 +125,11 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 						}
 						return nil
 					}
-					return fmt.Errorf("destination exists with same size but different hash")
+					return &models.CopyError{Code: models.ErrCodeChecksumMismatch, Message: "destination exists with same size but different hash", Path: dst}
 				} else if dstInfo.Size() > totalBytes {
-					return fmt.Errorf("destination exists and is larger than source")
+					return &models.CopyError{Code: models.ErrCodeUnknown, Message: "destination exists and is larger than source", Path: dst}
 				} else if !opts.Resume {
-					return fmt.Errorf("destination exists and overwrite is false")
+					return &models.CopyError{Code: models.ErrCodeUnknown, Message: "destination exists and overwrite is false", Path: dst}
 				}
 			}
 		}
@@ -137,7 +138,7 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 	// ## Create destination directory if it doesn't exist
 	destDir := filepath.Dir(dst)
 	if err := c.dstFs.MkdirAll(destDir, 0755); err != nil {
-		return fmt.Errorf("failed to create destination directory: %w", err)
+		return MapError(err, destDir, "failed to create destination directory")
 	}
 
 	// ## Open/Create destination file
@@ -146,16 +147,16 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 		// Open for appending/resume
 		dstFile, err = c.dstFs.OpenFile(dst, os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
-			return fmt.Errorf("failed to open destination for resume: %w", err)
+			return MapError(err, dst, "failed to open destination for resume")
 		}
 
 		// Seek source file to startOffset
 		seeker, ok := srcFile.(io.Seeker)
 		if !ok {
-			return fmt.Errorf("source file does not support seeking")
+			return &models.CopyError{Code: models.ErrCodeUnknown, Message: "source file does not support seeking", Path: src}
 		}
 		if _, err := seeker.Seek(startOffset, io.SeekStart); err != nil {
-			return fmt.Errorf("failed to seek source file: %w", err)
+			return MapError(err, src, "failed to seek source file")
 		}
 	} else {
 		// New file or overwrite
@@ -164,12 +165,12 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 		// 1. Resume is false and file exists (must check Overwrite)
 		// 2. Resume is true but file size check failed (must check Overwrite)
 		if exists, _ := afero.Exists(c.dstFs, dst); exists && !opts.Overwrite {
-			return fmt.Errorf("destination exists and overwrite is false")
+			return &models.CopyError{Code: models.ErrCodeUnknown, Message: "destination exists and overwrite is false", Path: dst}
 		}
 
 		dstFile, err = c.dstFs.Create(dst)
 		if err != nil {
-			return fmt.Errorf("failed to create destination: %w", err)
+			return MapError(err, dst, "failed to create destination")
 		}
 	}
 	defer dstFile.Close()
@@ -215,7 +216,7 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 
 	written, err := io.CopyBuffer(dstFile, reader, buf)
 	if err != nil {
-		return fmt.Errorf("copy failed: %w", err)
+		return MapError(err, dst, "copy failed")
 	}
 
 	// ## Verification Logic: If we resumed, we MUST re-hash the source file fully
@@ -224,7 +225,7 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 			Log.WithField("path", src).Info("Performing mandatory full re-hash for resumed file")
 			fullSourceHash, err := CalculateChecksum(c.srcFs, src, opts.HashAlgorithm)
 			if err != nil {
-				return fmt.Errorf("failed to calculate full source hash: %w", err)
+				return MapError(err, src, "failed to calculate full source hash")
 			}
 			hashResult = fullSourceHash
 		} else if hasher != nil {
@@ -262,7 +263,7 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 	// ## Post-copy verification
 	if opts.CalculateHash && hashResult != "" && destHashResult != "" {
 		if hashResult != destHashResult {
-			return fmt.Errorf("checksum mismatch after copy: source %s, dest %s", hashResult, destHashResult)
+			return &models.CopyError{Code: models.ErrCodeChecksumMismatch, Message: fmt.Sprintf("checksum mismatch after copy: source %s, dest %s", hashResult, destHashResult), Path: dst}
 		}
 	}
 

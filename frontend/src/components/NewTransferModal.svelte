@@ -161,14 +161,20 @@
                                 </svg>
                             </button>
                         </div>
-                        <div
+                        <button
                             bind:this={sourceZone}
+                            type="button"
                             class="drop-zone"
                             class:has-path={sourcePath !== ""}
                             onclick={pickSource}
+                            onkeydown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    pickSource();
+                                }
+                            }}
                             ondragover={handleDragOver}
                             ondrop={(e) => handleDrop(e, "source")}
-                            aria-hidden="true"
                         >
                             {#if sourcePath}
                                 <div class="path-display">{sourcePath}</div>
@@ -176,7 +182,7 @@
                                 <div class="plus-icon">+</div>
                                 <p>Click or drop source folder here</p>
                             {/if}
-                        </div>
+                        </button>
                     </div>
 
                     <!-- Arrow/Separator -->
@@ -213,14 +219,20 @@
                                 </svg>
                             </button>
                         </div>
-                        <div
+                        <button
                             bind:this={destZone}
+                            type="button"
                             class="drop-zone"
                             class:has-path={destPath !== ""}
                             onclick={pickDest}
+                            onkeydown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    pickDest();
+                                }
+                            }}
                             ondragover={handleDragOver}
                             ondrop={(e) => handleDrop(e, "dest")}
-                            aria-hidden="true"
                         >
                             {#if destPath}
                                 <div class="path-display">{destPath}</div>
@@ -228,7 +240,7 @@
                                 <div class="plus-icon">+</div>
                                 <p>Click or drop destination folder here</p>
                             {/if}
-                        </div>
+                        </button>
                     </div>
                 </div>
 
@@ -420,6 +432,9 @@
         background-color: rgba(255, 255, 255, 0.02);
         text-align: center;
         padding: var(--spacing-lg);
+        width: 100%;
+        font: inherit;
+        color: inherit;
     }
 
     .drop-zone:hover {

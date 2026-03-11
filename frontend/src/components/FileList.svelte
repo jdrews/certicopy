@@ -3,6 +3,10 @@
     import { formatBytes } from "../utils/formatters";
     import { appState } from "../lib/state.svelte";
     import type { FileStatus } from "../lib/types";
+    import {
+        RemoveFileFromJob,
+        ResumeTransfer,
+    } from "../../wailsjs/go/main/App";
 
     let { files = [], filter = $bindable("all") } = $props<{
         files: any[];
@@ -61,6 +65,22 @@
         }
         return hash;
     }
+
+    async function removeFile(jobId: string, sourcePath: string) {
+        try {
+            await RemoveFileFromJob(jobId, sourcePath);
+        } catch (e) {
+            console.error("Failed to remove file:", e);
+        }
+    }
+
+    async function retryFailedFiles() {
+        if (filteredFiles.length > 0 && filter === "failed") {
+            // All files in a given view typically share the same jobId, grab the first one
+            const jobId = filteredFiles[0].jobId;
+            await ResumeTransfer(jobId);
+        }
+    }
 </script>
 
 <div class="file-list-container">
@@ -77,6 +97,15 @@
             class="tab-btn {filter === 'failed' ? 'active' : ''}"
             onclick={() => (filter = "failed")}>Failed</button
         >
+        {#if filter === "failed" && filteredFiles.length > 0}
+            <button
+                class="retry-btn"
+                onclick={retryFailedFiles}
+                title="Retry all failed files"
+            >
+                ⟳ Retry All
+            </button>
+        {/if}
     </div>
 
     <div class="file-rows">
@@ -87,6 +116,7 @@
             <div class="col-hash">Dest Hash</div>
             <div class="col-size">Size</div>
             <div class="col-msg">Message</div>
+            <div class="col-action"></div>
         </div>
 
         {#each filteredFiles as file (file.sourcePath)}
@@ -117,7 +147,26 @@
                     {/if}
                 </div>
                 <div class="col-size">{formatBytes(file.size)}</div>
-                <div class="col-msg">{file.errorMessage || file.status}</div>
+                <div class="col-msg" title={file.errorMessage || file.status}>
+                    {#if file.errorCode}
+                        <span class="error-badge" title={file.errorCode}
+                            >{file.errorCode}</span
+                        >
+                    {/if}
+                    {file.errorMessage || file.status}
+                </div>
+                <div class="col-action">
+                    {#if file.status === "failed" || file.status === "paused"}
+                        <button
+                            class="action-btn remove-btn"
+                            onclick={() =>
+                                removeFile(file.jobId, file.sourcePath)}
+                            title="Remove file from transfer job"
+                        >
+                            ✕
+                        </button>
+                    {/if}
+                </div>
             </div>
         {/each}
         {#if filteredFiles.length === 0}
@@ -164,7 +213,7 @@
 
     .header-row {
         display: grid;
-        grid-template-columns: 30px 2fr 100px 100px 90px 1fr;
+        grid-template-columns: 30px 2fr 100px 100px 90px 1fr 40px;
         grid-column-gap: 12px;
         background-color: var(--bg-tertiary);
         padding: 8px 15px;
@@ -184,7 +233,7 @@
 
     .file-row {
         display: grid;
-        grid-template-columns: 30px 2fr 100px 100px 90px 1fr;
+        grid-template-columns: 30px 2fr 100px 100px 90px 1fr 40px;
         grid-column-gap: 12px;
         padding: 6px 15px;
         border-bottom: 1px solid #333;
@@ -237,6 +286,12 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         color: #888;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .col-action {
+        text-align: right;
     }
 
     .status-success {
@@ -269,5 +324,44 @@
         text-align: center;
         color: var(--text-secondary);
         font-style: italic;
+    }
+
+    .error-badge {
+        background-color: rgba(244, 71, 71, 0.2);
+        color: var(--error-color);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: bold;
+        border: 1px solid rgba(244, 71, 71, 0.4);
+    }
+
+    .action-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        opacity: 0.5;
+        transition: opacity 0.2s;
+        color: var(--text-secondary);
+        font-size: 14px;
+    }
+    .action-btn:hover {
+        opacity: 1;
+    }
+    .remove-btn:hover {
+        color: var(--error-color);
+    }
+
+    .retry-btn {
+        margin-left: auto;
+        background-color: var(--accent-color);
+        color: white;
+        border: none;
+        padding: 4px 12px;
+        font-size: 12px;
+        cursor: pointer;
+    }
+    .retry-btn:hover {
+        background-color: var(--accent-hover);
     }
 </style>

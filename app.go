@@ -123,6 +123,11 @@ func (a *App) CancelTransfer(jobID string) {
 	a.transferService.Cancel(jobID)
 }
 
+// RemoveFileFromJob completely removes a file from a job by source path
+func (a *App) RemoveFileFromJob(jobID string, sourcePath string) {
+	a.transferService.RemoveFileFromJob(jobID, sourcePath)
+}
+
 // SelectSource opens a dialog to select a source directory
 func (a *App) SelectSource() ([]string, error) {
 	selection, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{

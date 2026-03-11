@@ -118,7 +118,7 @@ func TestCopier_Copy_HashMismatch(t *testing.T) {
 		t.Fatal("Expected error due to hash mismatch, but got nil")
 	}
 
-	expectedErr := "destination exists with same size but different hash"
+	expectedErr := "[CHECKSUM_MISMATCH] destination exists with same size but different hash"
 	if err.Error() != expectedErr {
 		t.Errorf("Expected error %q, got %q", expectedErr, err.Error())
 	}
@@ -183,7 +183,7 @@ func TestCopier_Copy_PostCopyCorruption(t *testing.T) {
 		t.Fatal("Expected error due to post-copy checksum mismatch, but got nil")
 	}
 
-	if !strings.Contains(err.Error(), "checksum mismatch after copy") {
-		t.Errorf("Expected error containing %q, got %q", "checksum mismatch after copy", err.Error())
+	if !strings.Contains(err.Error(), "[CHECKSUM_MISMATCH] checksum mismatch after copy") {
+		t.Errorf("Expected error containing %q, got %q", "[CHECKSUM_MISMATCH] checksum mismatch after copy", err.Error())
 	}
 }

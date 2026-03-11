@@ -136,6 +136,8 @@ func (s *TransferService) processJob(job *models.TransferJob) bool {
 	s.cancel = cancel
 	defer cancel()
 
+	consecutiveSysFailures := 0
+
 	// Process files
 	for i := range job.Files {
 		file := job.Files[i]
@@ -143,7 +145,26 @@ func (s *TransferService) processJob(job *models.TransferJob) bool {
 			continue
 		}
 
-		if err := s.processFile(ctx, job, file); err != nil {
+		if err := s.processFileWithRetry(ctx, job, file); err != nil {
+			// Track systemic failures
+			var copyErr *models.CopyError
+			if errors.As(err, &copyErr) && !copyErr.IsAutoRetryable() && copyErr.Code != models.ErrCodeUnknown {
+				consecutiveSysFailures++
+			} else {
+				consecutiveSysFailures = 0
+			}
+
+			if consecutiveSysFailures >= 3 { // Max consecutive failures
+				core.Log.WithField("jobId", job.ID).Warn("Circuit breaker triggered, pausing job")
+				job.Status = models.StatusFailed
+				job.Error = "Auto-paused due to consecutive systemic failures"
+				if copyErr != nil {
+					job.ErrorCode = string(copyErr.Code)
+				}
+				s.pauseActiveJob(job)
+				return false
+			}
+
 			// Check if we should stop processing the entire job
 			if errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "context canceled") {
 				if job.Status == models.StatusPaused {
@@ -157,12 +178,45 @@ func (s *TransferService) processJob(job *models.TransferJob) bool {
 				s.emitQueueUpdate()
 				return true // Continue to next job in queue
 			}
+		} else {
+			consecutiveSysFailures = 0 // Reset on success
 		}
 	}
 
 	// Finalize job status
 	s.finalizeJobStatus(job)
 	return true
+}
+
+// processFileWithRetry handles retries with exponential backoff for a file
+func (s *TransferService) processFileWithRetry(ctx context.Context, job *models.TransferJob, file *models.FileInfo) error {
+	maxRetries := 3
+	baseDelay := 2 * time.Second
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		err := s.processFile(ctx, job, file)
+		if err == nil {
+			return nil // Success
+		}
+
+		var copyErr *models.CopyError
+		if errors.As(err, &copyErr) && !copyErr.IsAutoRetryable() {
+			return err // Terminal error based on code
+		}
+
+		if attempt == maxRetries {
+			return err // Max retries reached
+		}
+
+		// Exponential backoff
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(baseDelay * time.Duration(1<<attempt)):
+			// Retry
+		}
+	}
+	return nil
 }
 
 // processFile handles copying a single file within a job
@@ -242,6 +296,11 @@ func (s *TransferService) handleCopyResult(file *models.FileInfo, err error, las
 		} else {
 			file.Status = models.StatusFailed
 			file.ErrorMessage = err.Error()
+			var copyErr *models.CopyError
+			if errors.As(err, &copyErr) {
+				file.ErrorCode = string(copyErr.Code)
+				file.ErrorMessage = copyErr.Message
+			}
 		}
 	} else {
 		file.Status = models.StatusSuccess
@@ -439,5 +498,31 @@ func (s *TransferService) cancelSpecificJob(job *models.TransferJob) {
 			job.Files[i].ErrorMessage = "cancelled"
 		}
 	}
+	s.emitQueueUpdate()
+}
+
+// RemoveFileFromJob completely removes a file from a job by source path
+func (s *TransferService) RemoveFileFromJob(jobID string, sourcePath string) {
+	job := s.findJob(jobID)
+	if job == nil {
+		return
+	}
+
+	filtered := make([]*models.FileInfo, 0, len(job.Files))
+	for _, f := range job.Files {
+		if f.SourcePath != sourcePath {
+			filtered = append(filtered, f)
+		}
+	}
+	// Update counts
+	job.Files = filtered
+	job.TotalFiles = int64(len(filtered))
+	var newTotalSize int64
+	for _, f := range filtered {
+		newTotalSize += f.Size
+	}
+	job.TotalBytes = newTotalSize
+	s.updateJobProgress(job)
+
 	s.emitQueueUpdate()
 }

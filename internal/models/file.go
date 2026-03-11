@@ -24,5 +24,6 @@ type FileInfo struct {
 	SourceHash   string         `json:"sourceHash"`
 	DestHash     string         `json:"destHash"`
 	ErrorMessage string         `json:"errorMessage,omitempty"`
+	ErrorCode    string         `json:"errorCode,omitempty"`
 	BytesCopied  int64          `json:"bytesCopied"`
 }
