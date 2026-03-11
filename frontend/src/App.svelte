@@ -202,6 +202,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    background-color: var(--bg-secondary); /* SPEC: Surface #1E1E1E */
     border-right: 1px solid var(--border-color);
   }
 
@@ -213,7 +214,7 @@
   .new-transfer-btn {
     width: 100%;
     padding: 10px;
-    border-radius: 6px;
+    border-radius: 2px;
     font-weight: 600;
   }
 
@@ -239,21 +240,25 @@
 
   .settings-btn:hover {
     color: var(--text-primary);
-    background: var(--bg-tertiary);
+    background: var(--bg-hover);
   }
 
   .main-content {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-width: 0; /* Prevent flex child from overflowing */
+    min-width: 0;
+    background-color: var(--bg-primary); /* SPEC: Main Background #121212 */
+    
+    /* SPEC: Subtle inner-shadow on main transfer container */
+    box-shadow: inset 4px 0 15px -10px rgba(0, 0, 0, 0.8);
   }
 
   .progress-area {
     display: flex;
     flex-direction: column;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
     z-index: 5;
+    border-bottom: 1px solid var(--border-color);
   }
 
   .action-bar {
@@ -271,28 +276,29 @@
   }
 
   .btn-action {
-    background-color: var(--bg-tertiary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
+    background-color: transparent;
+    color: var(--text-secondary);
+    border: 1px solid #454545; /* SPEC: Secondary 1px border */
     padding: 5px 15px;
     font-size: 13px;
-    border-radius: 3px;
+    border-radius: 2px;
   }
 
   .btn-action:hover {
-    background-color: #444;
+    background-color: var(--bg-tertiary);
+    color: white;
   }
 
   .btn-danger:hover {
-    background-color: #a00;
+    background-color: var(--error-color);
     color: white;
-    border-color: #a00;
+    border-color: var(--error-color);
   }
 
   .btn-success:hover {
-    background-color: #080;
+    background-color: var(--success-color);
     color: white;
-    border-color: #080;
+    border-color: var(--success-color);
   }
 
   .list-area {

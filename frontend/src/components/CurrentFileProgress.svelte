@@ -45,7 +45,10 @@
     </div>
 
     <div class="bar-container">
-        <div class="progress-bar" style="width: {percentage}%"></div>
+        <div 
+            class="progress-bar" 
+            style="width: {percentage}%"
+        ></div>
     </div>
 </div>
 
@@ -92,15 +95,15 @@
     }
 
     .bar-container {
-        height: 6px;
-        background-color: #333;
-        border-radius: 3px;
+        height: 8px;
+        background-color: var(--track-color); /* SPEC: Track #2D2D2D */
+        border-radius: 2px;
         overflow: hidden;
     }
 
     .progress-bar {
         height: 100%;
-        background-color: var(--accent-color);
+        background-color: var(--accent-color); /* SPEC: Fill #0078D4 */
         transition: width 0.2s ease-out;
     }
 </style>

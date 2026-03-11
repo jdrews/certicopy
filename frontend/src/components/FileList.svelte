@@ -180,50 +180,52 @@
         display: flex;
         flex-direction: column;
         height: 100%;
-        background-color: var(--bg-secondary);
+        background-color: var(--bg-primary); /* SPEC: Main Background #121212 */
         font-size: 13px;
     }
 
     .list-tabs {
         display: flex;
-        background-color: var(--bg-primary);
+        background-color: var(--bg-secondary); /* SPEC: Surface/Sidebar #1E1E1E */
         border-bottom: 1px solid var(--border-color);
     }
 
     .tab-btn {
-        padding: 6px 12px;
+        padding: 8px 16px;
         background: none;
         border: none;
         color: var(--text-secondary);
         cursor: pointer;
         font-size: 12px;
+        transition: color 0.2s, background-color 0.2s;
     }
 
     .tab-btn:hover {
         color: var(--text-primary);
-        background-color: var(--bg-tertiary);
+        background-color: var(--bg-hover);
     }
 
     .tab-btn.active {
         color: var(--text-primary);
-        background-color: var(--bg-secondary);
-        border-top: 2px solid var(--accent-color);
-        font-weight: 500;
+        background-color: var(--bg-primary);
+        border-bottom: 2px solid var(--accent-color);
+        font-weight: 600;
     }
 
     .header-row {
         display: grid;
-        grid-template-columns: 30px 2fr 100px 100px 90px 1fr 40px;
+        grid-template-columns: 35px 2fr 100px 100px 90px 1fr 40px;
         grid-column-gap: 12px;
-        background-color: var(--bg-tertiary);
-        padding: 8px 15px;
+        background-color: var(--bg-secondary);
+        padding: 10px 15px;
         font-weight: 600;
-        font-size: 12px;
+        font-size: 13px; /* Standardized to match content feel */
         color: var(--text-secondary);
         border-bottom: 1px solid var(--border-color);
         position: sticky;
         top: 0;
         z-index: 10;
+        text-transform: none; /* Ensure no unintended casing */
     }
 
     .file-rows {
@@ -233,29 +235,32 @@
 
     .file-row {
         display: grid;
-        grid-template-columns: 30px 2fr 100px 100px 90px 1fr 40px;
+        grid-template-columns: 35px 2fr 100px 100px 90px 1fr 40px;
         grid-column-gap: 12px;
-        padding: 6px 15px;
-        border-bottom: 1px solid #333;
+        padding: 10px 15px; /* SPEC: Increased vertical padding to 10px */
+        border-bottom: 1px solid var(--border-color);
         align-items: center;
+        transition: background-color 0.1s;
+        border-left: 3px solid transparent;
     }
 
     .file-row:hover {
-        background-color: rgba(255, 255, 255, 0.05);
+        background-color: var(--bg-hover); /* SPEC: Hover Highlight #2A2D2E */
     }
 
     .row-active {
-        background-color: rgba(0, 122, 204, 0.2);
+        border-left: 3px solid var(--accent-color); /* SPEC: In Progress left-border accent */
+        background-color: rgba(0, 120, 212, 0.05);
     }
 
     .row-failed {
-        background-color: rgba(244, 71, 71, 0.1);
+        background-color: rgba(244, 67, 54, 0.05);
     }
     .row-paused {
-        background-color: rgba(245, 158, 11, 0.15);
+        background-color: rgba(245, 158, 11, 0.05);
     }
     .row-success {
-        background-color: rgba(16, 185, 129, 0.15);
+        border-left: 3px solid var(--success-color);
     }
 
     .col-icon {
@@ -263,39 +268,57 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        font-size: 14px;
     }
+
     .col-name {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
     }
+
+    .file-row .col-name {
+        color: #FFFFFF; /* SPEC: File Names White */
+        font-weight: 600; /* SPEC: Semi-bold */
+    }
+
     .col-hash {
-        font-family: monospace;
-        color: #aaa;
         display: flex;
         align-items: center;
         gap: 5px;
         overflow: hidden;
     }
+
+    .file-row .col-hash {
+        font-family: var(--font-mono); /* SPEC: JetBrains Mono */
+        color: var(--text-secondary); /* SPEC: Mid-gray #969696 */
+        font-size: 11px; /* SPEC: 0.9em size */
+    }
+
     .col-size {
         text-align: right;
-        color: #ccc;
+        color: var(--text-secondary);
     }
+
     .col-msg {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        color: #888;
         display: flex;
         align-items: center;
         gap: 6px;
     }
+
+    .file-row .col-msg {
+        color: var(--text-tertiary);
+    }
+
     .col-action {
         text-align: right;
     }
 
     .status-success {
-        color: var(--success-color);
+        color: var(--success-color); /* SPEC: Emerald #10B981 */
     }
     .status-failed {
         color: var(--error-color);
@@ -304,36 +327,32 @@
         color: var(--accent-color);
     }
     .status-paused {
-        color: #f59e0b;
+        color: var(--warning-color);
     }
     .status-pending {
-        color: var(--text-secondary);
+        color: var(--text-tertiary);
     }
 
     .hash-mismatch {
         color: var(--warning-color);
         font-weight: bold;
     }
-    .monospace {
-        font-family: "Consolas", "Monaco", monospace;
-        font-size: 12px;
-    }
 
     .empty-state {
-        padding: 20px;
+        padding: 40px;
         text-align: center;
-        color: var(--text-secondary);
+        color: var(--text-tertiary);
         font-style: italic;
     }
 
     .error-badge {
-        background-color: rgba(244, 71, 71, 0.2);
+        background-color: rgba(244, 67, 54, 0.1);
         color: var(--error-color);
         padding: 2px 6px;
-        border-radius: 4px;
+        border-radius: 2px;
         font-size: 10px;
         font-weight: bold;
-        border: 1px solid rgba(244, 71, 71, 0.4);
+        border: 1px solid rgba(244, 67, 54, 0.2);
     }
 
     .action-btn {
@@ -360,8 +379,9 @@
         padding: 4px 12px;
         font-size: 12px;
         cursor: pointer;
+        border-radius: 2px;
     }
     .retry-btn:hover {
-        background-color: var(--accent-hover);
+        background-color: var(--accent-muted);
     }
 </style>

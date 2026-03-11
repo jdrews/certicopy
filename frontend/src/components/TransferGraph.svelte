@@ -70,19 +70,27 @@
                 <linearGradient id="grad1" x1="0%" y1="0%" x2="0%" y2="100%">
                     <stop
                         offset="0%"
-                        style="stop-color:var(--accent-color);stop-opacity:0.5"
+                        style="stop-color:var(--accent-color);stop-opacity:0.15"
                     />
                     <stop
                         offset="100%"
-                        style="stop-color:var(--accent-color);stop-opacity:0.1"
+                        style="stop-color:transparent;stop-opacity:0"
                     />
                 </linearGradient>
             </defs>
+
+            <!-- SPEC: Horizontal Grid Lines #252525 at 50% opacity -->
+            <g class="grid-lines">
+                <line x1="0" y1="25" x2="100" y2="25" stroke="#252525" stroke-opacity="0.5" stroke-width="0.5" />
+                <line x1="0" y1="50" x2="100" y2="50" stroke="#252525" stroke-opacity="0.5" stroke-width="0.5" />
+                <line x1="0" y1="75" x2="100" y2="75" stroke="#252525" stroke-opacity="0.5" stroke-width="0.5" />
+            </g>
+
             <path
                 d={pathD}
                 fill="url(#grad1)"
                 stroke="var(--accent-color)"
-                stroke-width="1"
+                stroke-width="1.5"
                 vector-effect="non-scaling-stroke"
             />
         </svg>

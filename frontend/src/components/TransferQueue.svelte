@@ -94,19 +94,19 @@
 <style>
     .sidebar {
         width: 250px;
-        background-color: var(--bg-secondary);
+        background-color: var(--bg-secondary); /* SPEC: Surface #1E1E1E */
         border-right: 1px solid var(--border-color);
         display: flex;
         flex-direction: column;
-        flex: 1; /* Fill available space */
-        min-height: 0; /* Allow scrolling */
+        flex: 1;
+        min-height: 0;
     }
 
     .section-title {
         padding: 10px 15px;
         font-size: var(--font-size-sm);
         text-transform: uppercase;
-        color: var(--text-secondary);
+        color: var(--text-secondary); /* SPEC: #969696 */
         font-weight: bold;
         border-bottom: 1px solid var(--border-color);
     }
@@ -118,7 +118,7 @@
 
     .transfer-item {
         display: flex;
-        padding: 10px 15px;
+        padding: 12px 15px; /* Increased padding */
         border: none;
         border-bottom: 1px solid var(--border-color);
         background: transparent;
@@ -127,20 +127,21 @@
         font: inherit;
         color: inherit;
         cursor: pointer;
-        transition: background-color 0.2s;
+        transition: background-color 0.1s;
+        border-left: 3px solid transparent;
     }
 
     .transfer-item:hover {
-        background-color: var(--bg-tertiary);
+        background-color: var(--bg-hover); /* SPEC: #2A2D2E */
     }
 
     .transfer-item.selected {
-        background-color: var(--bg-tertiary);
-        border-left: 3px solid var(--accent-color);
+        background-color: var(--bg-hover);
+        border-left: 3px solid var(--accent-color); /* SPEC: #0078D4 */
     }
 
     .transfer-icon {
-        margin-right: 10px;
+        margin-right: 12px;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -148,20 +149,20 @@
     }
 
     .icon-active {
-        color: #3b82f6;
+        color: var(--accent-color);
         animation: spin 2s linear infinite;
     }
     .icon-paused {
-        color: #f59e0b;
+        color: var(--warning-color);
     }
     .icon-success {
-        color: #10b981;
+        color: var(--success-color); /* SPEC: #10B981 */
     }
     .icon-failed {
-        color: #ef4444;
+        color: var(--error-color);
     }
     .icon-pending {
-        color: var(--text-secondary);
+        color: var(--text-tertiary);
     }
 
     .transfer-details {
@@ -175,7 +176,8 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        margin-bottom: 1px;
+        margin-bottom: 2px;
+        color: var(--text-primary);
     }
 
     .transfer-dest {
@@ -195,7 +197,7 @@
     .empty-state {
         padding: 20px;
         text-align: center;
-        color: var(--text-secondary);
+        color: var(--text-tertiary);
         font-size: var(--font-size-sm);
     }
 
@@ -212,21 +214,17 @@
     }
 
     .error-badge {
-        background-color: rgba(244, 71, 71, 0.2);
+        background-color: rgba(244, 67, 54, 0.1);
         color: var(--error-color);
         padding: 1px 4px;
-        border-radius: 3px;
+        border-radius: 2px;
         font-size: 9px;
         font-weight: bold;
-        border: 1px solid rgba(244, 71, 71, 0.4);
+        border: 1px solid rgba(244, 67, 54, 0.2);
     }
 
     @keyframes spin {
-        0% {
-            transform: rotate(0deg);
-        }
-        100% {
-            transform: rotate(360deg);
-        }
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
     }
 </style>
