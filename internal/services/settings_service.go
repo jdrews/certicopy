@@ -39,6 +39,14 @@ func NewSettingsService() *SettingsService {
 	return s
 }
 
+// NewSettingsServiceWithConfigPath creates a new SettingsService with a specific config path
+func NewSettingsServiceWithConfigPath(configPath string) *SettingsService {
+	return &SettingsService{
+		configPath: configPath,
+		settings:   models.DefaultSettings(),
+	}
+}
+
 // Load reads settings from disk
 func (s *SettingsService) Load() error {
 	s.mutex.Lock()

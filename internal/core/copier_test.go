@@ -2,6 +2,9 @@ package core
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -187,3 +190,138 @@ func TestCopier_Copy_PostCopyCorruption(t *testing.T) {
 		t.Errorf("Expected error containing %q, got %q", "[CHECKSUM_MISMATCH] checksum mismatch after copy", err.Error())
 	}
 }
+
+func TestCopier_HashWithProgress(t *testing.T) {
+	srcFs := afero.NewMemMapFs()
+	dstFs := afero.NewMemMapFs()
+
+	content := []byte("constant content")
+	srcPath := "/s/f.txt"
+	dstPath := "/d/f.txt"
+
+	afero.WriteFile(srcFs, srcPath, content, 0644)
+	afero.WriteFile(dstFs, dstPath, content, 0644)
+
+	copier := NewCopier(srcFs, dstFs)
+	opts := CopyOptions{BufferSize: 1024, HashAlgorithm: HashMD5}
+	progressChan := make(chan Progress, 100)
+
+	srcHash, dstHash, err := copier.HashWithProgress(context.Background(), srcPath, dstPath, opts, progressChan)
+	if err != nil {
+		t.Fatalf("HashWithProgress failed: %v", err)
+	}
+
+	expectedHash := "b89cc4306e89c18d185fa217eb6b2120"
+	if srcHash != expectedHash || dstHash != expectedHash {
+		t.Errorf("Hash mismatch. Got %s, %s; want %s", srcHash, dstHash, expectedHash)
+	}
+
+	// Verify progress was sent
+	count := 0
+	for range progressChan {
+		count++
+	}
+	if count == 0 {
+		t.Error("No progress updates received")
+	}
+}
+
+func TestCopier_Resume(t *testing.T) {
+	srcFs := afero.NewMemMapFs()
+	dstFs := afero.NewMemMapFs()
+
+	srcContent := []byte("full content of the file") // 24 bytes
+	srcPath := "/src/file.bin"
+	dstPath := "/dst/file.bin"
+
+	afero.WriteFile(srcFs, srcPath, srcContent, 0644)
+	// Partial content already at destination
+	afero.WriteFile(dstFs, dstPath, srcContent[:10], 0644)
+
+	copier := NewCopier(srcFs, dstFs)
+	opts := CopyOptions{
+		BufferSize:    1024,
+		Resume:        true,
+		CalculateHash: true,
+		HashAlgorithm: HashMD5,
+	}
+
+	progressChan := make(chan Progress, 100)
+	err := copier.CopyWithProgress(context.Background(), srcPath, dstPath, opts, progressChan)
+	if err != nil {
+		t.Fatalf("Resume copy failed: %v", err)
+	}
+
+	// Verify final content
+	dstContent, _ := afero.ReadFile(dstFs, dstPath)
+	if string(dstContent) != string(srcContent) {
+		t.Errorf("Resume failed to complete file. Got %q, want %q", string(dstContent), string(srcContent))
+	}
+}
+
+type errorReader struct {
+	io.Reader
+	remaining int
+}
+
+func (r *errorReader) Read(p []byte) (n int, err error) {
+	if r.remaining <= 0 {
+		return 0, errors.New("read error")
+	}
+	n, err = r.Reader.Read(p[:min(len(p), r.remaining)])
+	r.remaining -= n
+	return
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+type errorReaderFs struct {
+	afero.Fs
+	errorAt int
+}
+
+func (f *errorReaderFs) Open(name string) (afero.File, error) {
+	file, err := f.Fs.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	return &errorReaderFile{File: file, errorAt: f.errorAt}, nil
+}
+
+type errorReaderFile struct {
+	afero.File
+	errorAt int
+	readSoFar int
+}
+
+func (f *errorReaderFile) Read(p []byte) (n int, err error) {
+	if f.readSoFar >= f.errorAt {
+		return 0, fmt.Errorf("simulated read error at %d", f.readSoFar)
+	}
+	n, err = f.File.Read(p)
+	f.readSoFar += n
+	return
+}
+
+func TestCopier_Copy_ReadError(t *testing.T) {
+	srcFs := &errorReaderFs{Fs: afero.NewMemMapFs(), errorAt: 10}
+	dstFs := afero.NewMemMapFs()
+
+	srcPath := "/s/f.txt"
+	afero.WriteFile(srcFs.Fs, srcPath, []byte("large file content that will fail eventually"), 0644)
+
+	copier := NewCopier(srcFs, dstFs)
+	err := copier.Copy(srcPath, "/d/f.txt", CopyOptions{BufferSize: 5})
+	if err == nil {
+		t.Fatal("Expected read error, got nil")
+	}
+	if !strings.Contains(err.Error(), "simulated read error") {
+		t.Errorf("Expected simulated read error, got %v", err)
+	}
+}
+

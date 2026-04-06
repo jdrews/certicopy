@@ -14,17 +14,30 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+// Copier interface for file operations
+type Copier interface {
+	Copy(src string, dst string, opts core.CopyOptions) error
+	CopyWithProgress(ctx context.Context, src string, dst string, opts core.CopyOptions, progressChan chan<- core.Progress) error
+	HashWithProgress(ctx context.Context, src string, dst string, opts core.CopyOptions, progressChan chan<- core.Progress) (string, string, error)
+}
+
+// Scanner interface for filesystem scanning
+type Scanner interface {
+	Scan(sources []string, destRoot string) ([]*models.FileInfo, int64, int64, error)
+}
+
 // TransferService orchestrates transfer jobs
 type TransferService struct {
 	queue           *core.TransferQueue
-	copier          *core.Copier
-	scanner         *core.Scanner
+	copier          Copier
+	scanner         Scanner
 	fs              afero.Fs
 	settingsService *SettingsService
 	ctx             context.Context // Wails runtime context
 	running         bool
 	cancel          context.CancelFunc
 }
+
 
 // NewTransferService creates a new TransferService
 func NewTransferService(settings *SettingsService) *TransferService {
@@ -35,6 +48,23 @@ func NewTransferService(settings *SettingsService) *TransferService {
 		queue:           core.NewTransferQueue(),
 		copier:          core.NewCopier(fs, fs),
 		scanner:         core.NewScanner(fs),
+		fs:              fs,
+		settingsService: settings,
+	}
+}
+
+// NewTransferServiceWithDeps creates a new TransferService with specific dependencies for testing
+func NewTransferServiceWithDeps(
+	queue *core.TransferQueue,
+	copier Copier,
+	scanner Scanner,
+	fs afero.Fs,
+	settings *SettingsService,
+) *TransferService {
+	return &TransferService{
+		queue:           queue,
+		copier:          copier,
+		scanner:         scanner,
 		fs:              fs,
 		settingsService: settings,
 	}
