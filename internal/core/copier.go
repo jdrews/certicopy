@@ -284,6 +284,100 @@ func (c *Copier) CopyWithProgress(ctx context.Context, src string, dst string, o
 	return nil
 }
 
+// HashWithProgress calculates hashes for source and destination sequentially and streams progress.
+func (c *Copier) HashWithProgress(ctx context.Context, src string, dst string, opts CopyOptions, progressChan chan<- Progress) (string, string, error) {
+	if progressChan != nil {
+		defer close(progressChan)
+	}
+
+	srcFile, err := c.srcFs.Open(src)
+	if err != nil {
+		return "", "", MapError(err, src, "failed to open source for hashing")
+	}
+	defer srcFile.Close()
+
+	dstFile, err := c.dstFs.Open(dst)
+	if err != nil {
+		return "", "", MapError(err, dst, "failed to open destination for hashing")
+	}
+	defer dstFile.Close()
+
+	srcInfo, err := srcFile.Stat()
+	if err != nil {
+		return "", "", MapError(err, src, "failed to stat source for hashing")
+	}
+	totalBytes := srcInfo.Size()
+
+	srcHasher, err := NewHasher(opts.HashAlgorithm)
+	if err != nil {
+		return "", "", err
+	}
+	dstHasher, err := NewHasher(opts.HashAlgorithm)
+	if err != nil {
+		return "", "", err
+	}
+
+	startTime := time.Now()
+
+	// Hash source
+	srcProxy := &ReaderProxy{
+		Reader:  srcFile,
+		Total:   totalBytes * 2,
+		Context: ctx,
+		ProgressCtx: &ProgressContext{
+			Channel:     progressChan,
+			StartTime:   startTime,
+			BytesRead:   0,
+			TotalOffset: 0,
+		},
+	}
+	
+	buf := make([]byte, opts.BufferSize)
+	if len(buf) == 0 {
+		buf = make([]byte, 1024*1024)
+	}
+
+	if _, err := io.CopyBuffer(srcHasher, srcProxy, buf); err != nil {
+		return "", "", MapError(err, src, "failed to hash source")
+	}
+	srcHashResult := fmt.Sprintf("%x", srcHasher.Sum(nil))
+
+	// Hash destination
+	dstProxy := &ReaderProxy{
+		Reader:  dstFile,
+		Total:   totalBytes * 2,
+		Context: ctx,
+		ProgressCtx: &ProgressContext{
+			Channel:     progressChan,
+			StartTime:   startTime,
+			BytesRead:   totalBytes,
+			TotalOffset: 0,
+		},
+	}
+	
+	if _, err := io.CopyBuffer(dstHasher, dstProxy, buf); err != nil {
+		return "", "", MapError(err, dst, "failed to hash destination")
+	}
+	dstHashResult := fmt.Sprintf("%x", dstHasher.Sum(nil))
+	
+	// Send final progress
+	if progressChan != nil {
+		progressChan <- Progress{
+			BytesCopied: totalBytes * 2,
+			TotalBytes:  totalBytes * 2,
+			Speed:       float64(totalBytes*2) / time.Since(startTime).Seconds(),
+			SourceHash:  srcHashResult,
+			DestHash:    dstHashResult,
+		}
+	}
+
+	if srcHashResult != dstHashResult {
+		return srcHashResult, dstHashResult, &models.CopyError{Code: models.ErrCodeChecksumMismatch, Message: fmt.Sprintf("checksum mismatch during end check: source %s, dest %s", srcHashResult, dstHashResult), Path: dst}
+	}
+
+	return srcHashResult, dstHashResult, nil
+}
+
 type ProgressContext struct {
 	Channel     chan<- Progress
 	StartTime   time.Time

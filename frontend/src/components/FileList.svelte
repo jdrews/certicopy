@@ -110,7 +110,7 @@
 
     <div class="file-rows">
         <div class="header-row">
-            <div class="col-icon"></div>
+            <div class="col-icon-container"></div>
             <div class="col-name">Name</div>
             <div class="col-hash">Source Hash</div>
             <div class="col-hash">Dest Hash</div>
@@ -129,8 +129,22 @@
                     ? 'row-paused'
                     : ''} {file.status === 'success' ? 'row-success' : ''}"
             >
-                <div class="col-icon {getStatusClass(file.status)}">
-                    {getStatusIcon(file.status)}
+                <div class="col-icon-container">
+                    {#if file.transferCompleted}
+                        <div class="col-icon status-success" title="Transfer Complete">✓</div>
+                    {:else if file.status === "failed"}
+                         <div class="col-icon status-failed">{getStatusIcon(file.status)}</div>
+                    {:else if file.status === "paused"}
+                         <div class="col-icon status-paused">{getStatusIcon(file.status)}</div>
+                    {:else}
+                         <div class="col-icon {getStatusClass(file.status)}">{getStatusIcon(file.status)}</div>
+                    {/if}
+
+                    {#if file.status === "hashing"}
+                        <div class="col-icon status-hashing animate-spin" title="Verifying Integrity...">⟳</div>
+                    {:else if file.endHashVerified}
+                        <div class="col-icon status-hashing" title="Integrity Verified">✓</div>
+                    {/if}
                 </div>
                 <div class="col-name" title={file.sourcePath}>
                     {file.name}
@@ -214,7 +228,7 @@
 
     .header-row {
         display: grid;
-        grid-template-columns: 35px 2fr 100px 100px 90px 1fr 40px;
+        grid-template-columns: 45px 1.5fr 100px 100px 90px 2.5fr 40px;
         grid-column-gap: 12px;
         background-color: var(--bg-secondary);
         padding: 10px 15px;
@@ -235,7 +249,7 @@
 
     .file-row {
         display: grid;
-        grid-template-columns: 35px 2fr 100px 100px 90px 1fr 40px;
+        grid-template-columns: 45px 1.5fr 100px 100px 90px 2.5fr 40px;
         grid-column-gap: 12px;
         padding: 10px 15px; /* SPEC: Increased vertical padding to 10px */
         border-bottom: 1px solid var(--border-color);
@@ -263,12 +277,21 @@
         border-left: 3px solid var(--success-color);
     }
 
+    .col-icon-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        width: 45px; /* Slightly wider to accommodate two icons */
+    }
+
     .col-icon {
         text-align: center;
         display: flex;
         align-items: center;
         justify-content: center;
         font-size: 14px;
+        min-width: 14px;
     }
 
     .col-name {
@@ -329,9 +352,22 @@
     .status-paused {
         color: var(--warning-color);
     }
+    .status-hashing {
+        color: #9d50da; /* SPEC: Purple for End Hash */
+    }
     .status-pending {
         color: var(--text-tertiary);
     }
+
+    .animate-spin {
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
 
     .hash-mismatch {
         color: var(--warning-color);

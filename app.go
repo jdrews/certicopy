@@ -48,11 +48,12 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) processCLITransfers() {
 	transfers := viper.GetStringSlice("transfer")
 	overwrite := viper.GetBool("overwrite")
+	skipEndCheck := viper.GetBool("skip-end-check")
 	hashAlgo := viper.GetString("hash")
 	bufferSizeKB := viper.GetInt("buffer")
 
 	// Apply CLI overrides to settings if provided
-	if hashAlgo != "" || bufferSizeKB > 0 || overwrite {
+	if hashAlgo != "" || bufferSizeKB > 0 || overwrite || skipEndCheck {
 		settings := a.settingsService.Get()
 		if hashAlgo != "" {
 			settings.HashAlgorithm = hashAlgo
@@ -62,6 +63,9 @@ func (a *App) processCLITransfers() {
 		}
 		if overwrite {
 			settings.Overwrite = true
+		}
+		if skipEndCheck {
+			settings.EndCheck = false
 		}
 		a.settingsService.Save(settings)
 	}

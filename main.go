@@ -21,6 +21,7 @@ func main() {
 	help := pflag.BoolP("help", "h", false, "Show this help message")
 	pflag.StringSliceP("transfer", "t", []string{}, "Folders to transfer in src:dst format (e.g. -t /src:/dst)")
 	pflag.BoolP("overwrite", "o", false, "Overwrite existing files at destination")
+	pflag.BoolP("skip-end-check", "s", false, "Skip the extra hash check at the end of the transfer")
 	pflag.StringP("hash", "a", "", "Hash algorithm to use (xxhash, blake2b, sha256, md5). Default: xxhash")
 	pflag.IntP("buffer", "b", 0, "Buffer size in kilobytes (e.g. 1024 for 1MB). Default: 1MB")
 	pflag.StringP("logfile", "l", "", "Path to log file (e.g. certicopy.log)")

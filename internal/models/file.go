@@ -10,6 +10,7 @@ const (
 	StatusFailed     TransferStatus = "failed"
 	StatusSkipped    TransferStatus = "skipped"
 	StatusPaused     TransferStatus = "paused"
+	StatusHashing    TransferStatus = "hashing"
 )
 
 // FileInfo contains metadata and transfer status for a single file
@@ -23,7 +24,9 @@ type FileInfo struct {
 	Status       TransferStatus `json:"status"`
 	SourceHash   string         `json:"sourceHash"`
 	DestHash     string         `json:"destHash"`
-	ErrorMessage string         `json:"errorMessage,omitempty"`
-	ErrorCode    string         `json:"errorCode,omitempty"`
-	BytesCopied  int64          `json:"bytesCopied"`
+	ErrorMessage      string         `json:"errorMessage,omitempty"`
+	ErrorCode         string         `json:"errorCode,omitempty"`
+	BytesCopied       int64          `json:"bytesCopied"`
+	TransferCompleted bool           `json:"transferCompleted"`
+	EndHashVerified   bool           `json:"endHashVerified"`
 }

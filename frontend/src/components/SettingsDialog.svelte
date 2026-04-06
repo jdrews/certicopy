@@ -8,6 +8,7 @@
         hashAlgorithm: "xxhash",
         bufferSize: 1048576, // 1MB
         overwrite: false,
+        endCheck: true,
     });
 
     const formattedBufferSize = $derived(() => {
@@ -36,6 +37,7 @@
                     settings.hashAlgorithm = s.hashAlgorithm;
                     settings.bufferSize = s.bufferSize;
                     settings.overwrite = s.overwrite;
+                    settings.endCheck = s.endCheck;
                 }
             } catch (e) {
                 console.error("Failed to load settings:", e);
@@ -85,6 +87,17 @@
                 />
                 <label for="overwrite"
                     >Overwrite destination files if they exist</label
+                >
+            </div>
+
+            <div class="form-group checkbox-group">
+                <input
+                    id="endCheck"
+                    type="checkbox"
+                    bind:checked={settings.endCheck}
+                />
+                <label for="endCheck"
+                    >Perform strict end-of-transfer hash check</label
                 >
             </div>
 

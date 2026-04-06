@@ -61,16 +61,19 @@
         (transfer?.status === "success" || transfer?.status === "completed") &&
             metrics.dataPoints.length > 2,
     );
+
+    const isHashing = $derived(transfer?.status === "hashing");
+    const strokeColor = $derived("var(--accent-color)");
 </script>
 
 <div class="graph-container">
     {#if metrics.dataPoints.length > 2}
         <svg viewBox="0 0 100 100" preserveAspectRatio="none">
             <defs>
-                <linearGradient id="grad1" x1="0%" y1="0%" x2="0%" y2="100%">
+                <linearGradient id="grad-{transfer?.id || 'default'}" x1="0%" y1="0%" x2="0%" y2="100%">
                     <stop
                         offset="0%"
-                        style="stop-color:var(--accent-color);stop-opacity:0.15"
+                        style="stop-color:{strokeColor};stop-opacity:0.15"
                     />
                     <stop
                         offset="100%"
@@ -88,8 +91,8 @@
 
             <path
                 d={pathD}
-                fill="url(#grad1)"
-                stroke="var(--accent-color)"
+                fill="url(#grad-{transfer?.id || 'default'})"
+                stroke={strokeColor}
                 stroke-width="1.5"
                 vector-effect="non-scaling-stroke"
             />

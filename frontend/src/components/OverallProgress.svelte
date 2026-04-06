@@ -18,13 +18,19 @@
             ? (transfer.totalBytes - transfer.bytesCopied) / currentSpeed
             : 0
     );
+
+    const isHashing = $derived(transfer?.status === "hashing");
 </script>
 
 <div class="progress-panel">
     <div class="info-row">
         <div class="label-col">
             <div class="path" title={transfer?.destination || ""}>
-                {transfer?.destination || "No destination"}
+                {#if isHashing}
+                    Hashing Verification in Progress: {transfer?.destination || ""}
+                {:else}
+                    {transfer?.destination || "No destination"}
+                {/if}
             </div>
         </div>
         <div class="stats-col">
@@ -45,7 +51,7 @@
 
     <div class="bar-container">
         <div 
-            class="progress-bar" 
+            class="progress-bar {isHashing ? 'hashing' : ''}" 
             style="width: {percentage}%"
         ></div>
     </div>

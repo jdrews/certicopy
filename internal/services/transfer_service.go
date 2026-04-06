@@ -183,8 +183,130 @@ func (s *TransferService) processJob(job *models.TransferJob) bool {
 		}
 	}
 
+	// Post-processing: End Hash Check
+	settings := s.settingsService.Get()
+	if settings.EndCheck {
+		hasSuccessFiles := false
+		for _, file := range job.Files {
+			if file.Status == models.StatusSuccess {
+				hasSuccessFiles = true
+				break
+			}
+		}
+
+		if hasSuccessFiles && s.processHashPhase(ctx, job) == false {
+			return false // Cancelled or paused during hashing
+		}
+	}
+
 	// Finalize job status
 	s.finalizeJobStatus(job)
+	return true
+}
+
+// processHashPhase performs a full hash re-check of successfully transferred files
+func (s *TransferService) processHashPhase(ctx context.Context, job *models.TransferJob) bool {
+	core.Log.WithField("jobId", job.ID).Info("Starting end hash check phase")
+
+	job.Status = models.StatusHashing
+	job.BytesCopied = 0
+
+	// Recalculate total bytes for hashing logic (each successful file will be hashed twice, src and dst)
+	var hashTotalBytes int64
+	for _, file := range job.Files {
+		if file.Status == models.StatusSuccess {
+			hashTotalBytes += file.Size * 2
+			// Clear hashes to indicate they are being recalculated
+			file.SourceHash = ""
+			file.DestHash = ""
+			file.BytesCopied = 0
+			file.Status = models.StatusHashing
+			file.ErrorMessage = "verifying integrity..."
+			s.emitFileUpdate(file)
+		}
+	}
+	job.TotalBytes = hashTotalBytes
+	s.emitQueueUpdate()
+
+	settings := s.settingsService.Get()
+	for i := range job.Files {
+		file := job.Files[i]
+		if file.Status != models.StatusHashing {
+			continue // Only re-hash files that successfully copied
+		}
+
+		opts := core.CopyOptions{
+			BufferSize:    settings.BufferSize,
+			HashAlgorithm: core.HashAlgorithm(settings.HashAlgorithm),
+		}
+
+		progressChan := make(chan core.Progress)
+		errChan := make(chan error)
+		file.ErrorMessage = "hashing..." // Clear the previous "transferred" message
+		s.emitFileUpdate(file)
+
+		go func() {
+			srcHash, dstHash, err := s.copier.HashWithProgress(ctx, file.SourcePath, file.DestPath, opts, progressChan)
+			if err == nil {
+				file.SourceHash = srcHash
+				file.DestHash = dstHash
+			}
+			errChan <- err
+		}()
+
+		var lastUpdate time.Time
+
+		for p := range progressChan {
+			// p.BytesCopied contains BytesRead for this file (up to file.Size * 2)
+			file.BytesCopied = p.BytesCopied
+
+			if time.Since(lastUpdate) > 200*time.Millisecond {
+				s.updateJobProgress(job)
+				s.emitProgress(job, p)
+				s.emitFileUpdate(file)
+				s.emitQueueUpdate()
+				lastUpdate = time.Now()
+			}
+		}
+
+		err := <-errChan
+		if err != nil {
+			if errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "context canceled") {
+				file.Status = models.StatusPaused
+				job.Status = models.StatusPaused
+				s.emitFileUpdate(file)
+				s.emitQueueUpdate()
+				return false
+			}
+			file.Status = models.StatusFailed
+			file.ErrorMessage = fmt.Sprintf("hash verify failed: %v", err)
+			file.EndHashVerified = false
+		} else {
+			file.Status = models.StatusSuccess // switch back to success
+			file.BytesCopied = file.Size * 2   // leave it at total bytes hashed for UI until we revert
+			file.EndHashVerified = true
+			file.ErrorMessage = "success: integrity verified"
+		}
+
+		s.updateJobProgress(job)
+		s.emitFileUpdate(file)
+		s.emitQueueUpdate()
+	}
+
+	// Revert job tracking back to normal size so "Complete" shows correct total bytes
+	var originalTotalBytes int64
+	for _, file := range job.Files {
+		// We use file.Size, the true original size
+		originalTotalBytes += file.Size
+		// Revert successful files to correct BytesCopied
+		if file.Status == models.StatusSuccess {
+			file.BytesCopied = file.Size
+		}
+	}
+	job.TotalBytes = originalTotalBytes
+	job.BytesCopied = originalTotalBytes // Reset so percentage is 100%
+	s.emitQueueUpdate()
+
 	return true
 }
 
@@ -304,8 +426,9 @@ func (s *TransferService) handleCopyResult(file *models.FileInfo, err error, las
 		}
 	} else {
 		file.Status = models.StatusSuccess
-		file.ErrorMessage = "success"
+		file.ErrorMessage = "transferred"
 		file.BytesCopied = file.Size
+		file.TransferCompleted = true
 		file.SourceHash = lastProgress.SourceHash
 		file.DestHash = lastProgress.DestHash
 	}
