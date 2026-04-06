@@ -190,3 +190,112 @@ func TestTransferService_CircuitBreaker(t *testing.T) {
 		t.Errorf("Expected circuit breaker error message, got %q", job.Error)
 	}
 }
+
+func TestTransferService_PauseAndResume(t *testing.T) {
+	mockCopier := &MockCopier{
+		copyWithProgressFunc: func(ctx context.Context, src string, dst string, opts core.CopyOptions, progressChan chan<- core.Progress) error {
+			defer close(progressChan)
+			// Simulate long running copy that respects context
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(500 * time.Millisecond):
+				return nil
+			}
+		},
+	}
+	mockScanner := &MockScanner{
+		scanFunc: func(sources []string, destRoot string) ([]*models.FileInfo, int64, int64, error) {
+			return []*models.FileInfo{{Name: "f.txt", SourcePath: "/s/f.txt", DestPath: "/d/f.txt", Size: 100}}, 1, 100, nil
+		},
+	}
+
+	settings := NewSettingsServiceWithConfigPath("/tmp/settings.json")
+	s := NewTransferServiceWithDeps(core.NewTransferQueue(), mockCopier, mockScanner, afero.NewMemMapFs(), settings)
+
+	jobID, _ := s.AddTransfer([]string{"/s"}, "/d", false)
+	s.StartQueue()
+
+	time.Sleep(50 * time.Millisecond) // Job should be in progress
+	s.Pause(jobID)
+	
+	time.Sleep(50 * time.Millisecond) // Wait for pause to propagate
+	job := s.GetQueue()[0]
+	if job.Status != models.StatusPaused {
+		t.Errorf("Expected job status paused, got %v", job.Status)
+	}
+
+	// Resume
+	s.Resume(jobID)
+	
+	// Wait for status to change to InProgress (polling to be robust)
+	success := false
+	for i := 0; i < 20; i++ {
+		time.Sleep(50 * time.Millisecond)
+		job = s.GetQueue()[0]
+		if job.Status == models.StatusInProgress {
+			success = true
+			break
+		}
+	}
+	
+	if !success {
+		t.Errorf("Expected job status in_progress after resume (jobID: %s), got %v", jobID, job.Status)
+	}
+}
+
+func TestTransferService_Cancel(t *testing.T) {
+	mockCopier := &MockCopier{
+		copyWithProgressFunc: func(ctx context.Context, src string, dst string, opts core.CopyOptions, progressChan chan<- core.Progress) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+	mockScanner := &MockScanner{
+		scanFunc: func(sources []string, destRoot string) ([]*models.FileInfo, int64, int64, error) {
+			return []*models.FileInfo{{Name: "f1", SourcePath: "/s/f1", DestPath: "/d/f1", Size: 10}}, 1, 10, nil
+		},
+	}
+
+	settings := NewSettingsServiceWithConfigPath("/tmp/settings.json")
+	s := NewTransferServiceWithDeps(core.NewTransferQueue(), mockCopier, mockScanner, afero.NewMemMapFs(), settings)
+
+	jobID, _ := s.AddTransfer([]string{"/s"}, "/d", false)
+	s.StartQueue()
+	time.Sleep(50 * time.Millisecond)
+
+	s.Cancel(jobID)
+	time.Sleep(50 * time.Millisecond)
+
+	job := s.GetQueue()[0]
+	if job.Status != models.StatusFailed || job.Error != "cancelled" {
+		t.Errorf("Expected job cancelled, got status %v, error %v", job.Status, job.Error)
+	}
+}
+
+func TestTransferService_RemoveFileFromJob(t *testing.T) {
+	mockScanner := &MockScanner{
+		scanFunc: func(sources []string, destRoot string) ([]*models.FileInfo, int64, int64, error) {
+			return []*models.FileInfo{
+				{Name: "f1", SourcePath: "/s/f1", Size: 100},
+				{Name: "f2", SourcePath: "/s/f2", Size: 200},
+			}, 2, 300, nil
+		},
+	}
+
+	settings := NewSettingsServiceWithConfigPath("/tmp/settings.json")
+	s := NewTransferServiceWithDeps(core.NewTransferQueue(), &MockCopier{}, mockScanner, afero.NewMemMapFs(), settings)
+
+	jobID, _ := s.AddTransfer([]string{"/s"}, "/d", false)
+	
+	s.RemoveFileFromJob(jobID, "/s/f1")
+	
+	job := s.GetQueue()[0]
+	if len(job.Files) != 1 {
+		t.Errorf("Expected 1 file remaining, got %d", len(job.Files))
+	}
+	if job.TotalBytes != 200 {
+		t.Errorf("Expected total bytes 200, got %d", job.TotalBytes)
+	}
+}
+

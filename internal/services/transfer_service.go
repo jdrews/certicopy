@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jdrews/certicopy/internal/core"
@@ -36,8 +37,9 @@ type TransferService struct {
 	ctx             context.Context // Wails runtime context
 	running         bool
 	cancel          context.CancelFunc
+	jobAdded        chan struct{}
+	mutex           sync.Mutex
 }
-
 
 // NewTransferService creates a new TransferService
 func NewTransferService(settings *SettingsService) *TransferService {
@@ -50,6 +52,7 @@ func NewTransferService(settings *SettingsService) *TransferService {
 		scanner:         core.NewScanner(fs),
 		fs:              fs,
 		settingsService: settings,
+		jobAdded:        make(chan struct{}, 10),
 	}
 }
 
@@ -67,6 +70,7 @@ func NewTransferServiceWithDeps(
 		scanner:         scanner,
 		fs:              fs,
 		settingsService: settings,
+		jobAdded:        make(chan struct{}, 10),
 	}
 }
 
@@ -114,12 +118,31 @@ func (s *TransferService) AddTransfer(sources []string, dest string, overwrite b
 	s.queue.Add(job)
 	s.emitQueueUpdate()
 	core.Log.WithField("jobId", job.ID).Debug("Job added to queue")
+
+	// Start queue processing
+	s.StartQueue()
+
+	// Signal that a job was added
+	select {
+	case s.jobAdded <- struct{}{}:
+	default:
+	}
+
 	return job.ID, nil
 }
 
 // StartQueue starts processing the queue
 func (s *TransferService) StartQueue() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	core.Log.Debug("StartQueue called")
+
+	// Always try to signal the worker in case it's waiting
+	select {
+	case s.jobAdded <- struct{}{}:
+	default:
+	}
+
 	if s.running {
 		core.Log.Debug("StartQueue: already running")
 		return
@@ -129,22 +152,36 @@ func (s *TransferService) StartQueue() {
 }
 
 func (s *TransferService) processQueue() {
-	core.Log.Debug("processQueue started")
+	core.Log.Info("processQueue started")
 	defer func() {
-		core.Log.Debug("processQueue stopping")
+		s.mutex.Lock()
 		s.running = false
+		s.mutex.Unlock()
+		core.Log.Info("processQueue stopping")
 	}()
 
 	for {
 		// Get next pending job (simple Peek for now, assuming only one consumer)
 		job := s.queue.Peek()
 		if job == nil {
-			core.Log.Debug("processQueue: Queue empty")
-			return // Queue empty
+			core.Log.Info("processQueue: Queue empty, waiting for signal")
+			// Wait for a signal that a job was added
+			select {
+			case <-s.jobAdded:
+				core.Log.Info("processQueue: Signal received")
+				continue
+			case <-time.After(10 * time.Second): // Timeout to allow goroutine cleanup
+				return
+			}
 		}
 
+		// Go ahead with processing the job.
+		// processJob returns true when a job has finished (success/failure)
+		// and the queue should proceed to the next job. It returns false
+		// if the job was paused or interrupted, and we should just cycle.
 		if !s.processJob(job) {
-			return // Cancelled or paused
+			core.Log.Info("processQueue: Job paused or interrupted, continuing loop")
+			continue
 		}
 	}
 }
@@ -154,7 +191,7 @@ func (s *TransferService) processJob(job *models.TransferJob) bool {
 	core.Log.WithFields(logrus.Fields{
 		"jobId":     job.ID,
 		"fileCount": len(job.Files),
-	}).Info("Processing transfer job")
+	}).Debug("processJob: Starting")
 
 	// Update job status
 	job.Status = models.StatusInProgress
@@ -197,11 +234,16 @@ func (s *TransferService) processJob(job *models.TransferJob) bool {
 
 			// Check if we should stop processing the entire job
 			if errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "context canceled") {
-				if job.Status == models.StatusPaused {
+				core.Log.WithFields(logrus.Fields{
+					"jobId":  job.ID,
+					"status": job.Status,
+				}).Debug("processJob: Context cancelled, checking job status")
+
+				if job.Status == models.StatusPaused || job.Status == models.StatusPending {
 					s.emitQueueUpdate()
-					return false // Pause requested, stop queue processing
+					return false // Stop current processing loop, let queue restart/continue
 				}
-				// Job was canceled, finalize status and continue to next job
+				// Job was canceled terminaly
 				job.Status = models.StatusFailed
 				job.Error = "cancelled"
 				job.CompletedAt = time.Now().UnixMilli()
@@ -231,6 +273,7 @@ func (s *TransferService) processJob(job *models.TransferJob) bool {
 
 	// Finalize job status
 	s.finalizeJobStatus(job)
+	core.Log.WithField("jobId", job.ID).Info("processJob: Finished successfully")
 	return true
 }
 
@@ -572,8 +615,14 @@ func (s *TransferService) Resume(jobID string) {
 	}
 
 	if resumed {
+		core.Log.WithField("jobId", jobID).Debug("Resume: Job successfully resumed and signaled")
 		s.emitQueueUpdate()
 		s.StartQueue()
+		// Signal that a job was resumed
+		select {
+		case s.jobAdded <- struct{}{}:
+		default:
+		}
 	}
 }
 
