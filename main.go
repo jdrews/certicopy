@@ -51,9 +51,15 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "certicopy",
-		Width:  1024,
-		Height: 768,
+		Title:            "certicopy",
+		Width:            1024,
+		Height:           768,
+		MinWidth:         800,
+		MinHeight:        600,
+		MaxWidth:         9999, // Workaround for Linux Wayland maximization issue
+		MaxHeight:        9999, // Workaround for Linux Wayland maximization issue
+		DisableResize:    false,
+		WindowStartState: options.Normal,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
