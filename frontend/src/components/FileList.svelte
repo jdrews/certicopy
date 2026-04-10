@@ -87,6 +87,49 @@
             await ResumeTransfer(jobId);
         }
     }
+
+    // --- Column Resizing Logic ---
+    let colWidths = $state({
+        name: 200,
+        sourceHash: 110,
+        destHash: 110,
+        size: 90,
+        message: 400,
+    });
+
+    let resizingCol: string | null = null;
+    let startX = 0;
+    let startWidth = 0;
+
+    function startResize(e: MouseEvent, col: string) {
+        e.preventDefault();
+        resizingCol = col;
+        startX = e.pageX;
+        startWidth = (colWidths as any)[col];
+
+        window.addEventListener("mousemove", handleResize);
+        window.addEventListener("mouseup", stopResize);
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+    }
+
+    function handleResize(e: MouseEvent) {
+        if (!resizingCol) return;
+        const diff = e.pageX - startX;
+        (colWidths as any)[resizingCol] = Math.max(50, startWidth + diff);
+    }
+
+    function stopResize() {
+        resizingCol = null;
+        window.removeEventListener("mousemove", handleResize);
+        window.removeEventListener("mouseup", stopResize);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+    }
+
+    const gridTemplate = $derived(
+        `35px ${colWidths.name}px ${colWidths.sourceHash}px ${colWidths.destHash}px ${colWidths.size}px ${colWidths.message}px 40px`,
+    );
 </script>
 
 <div class="file-list-container">
@@ -114,14 +157,59 @@
         {/if}
     </div>
 
-    <div class="file-rows">
+    <div class="file-rows" style="--grid-template: {gridTemplate}">
         <div class="header-row">
             <div class="col-icon-container"></div>
-            <div class="col-name">Name</div>
-            <div class="col-hash">Source Hash</div>
-            <div class="col-hash">Dest Hash</div>
-            <div class="col-size">Size</div>
-            <div class="col-msg">Message</div>
+            <div class="col-header">
+                Name
+                <div
+                    class="resizer"
+                    role="button"
+                    tabindex="-1"
+                    aria-label="Resize column"
+                    onmousedown={(e) => startResize(e, "name")}
+                ></div>
+            </div>
+            <div class="col-header">
+                Source Hash
+                <div
+                    class="resizer"
+                    role="button"
+                    tabindex="-1"
+                    aria-label="Resize column"
+                    onmousedown={(e) => startResize(e, "sourceHash")}
+                ></div>
+            </div>
+            <div class="col-header">
+                Dest Hash
+                <div
+                    class="resizer"
+                    role="button"
+                    tabindex="-1"
+                    aria-label="Resize column"
+                    onmousedown={(e) => startResize(e, "destHash")}
+                ></div>
+            </div>
+            <div class="col-header">
+                Size
+                <div
+                    class="resizer"
+                    role="button"
+                    tabindex="-1"
+                    aria-label="Resize column"
+                    onmousedown={(e) => startResize(e, "size")}
+                ></div>
+            </div>
+            <div class="col-header">
+                Message
+                <div
+                    class="resizer"
+                    role="button"
+                    tabindex="-1"
+                    aria-label="Resize column"
+                    onmousedown={(e) => startResize(e, "message")}
+                ></div>
+            </div>
             <div class="col-action"></div>
         </div>
 
@@ -234,18 +322,49 @@
 
     .header-row {
         display: grid;
-        grid-template-columns: 45px 1.5fr 100px 100px 90px 2.5fr 40px;
-        grid-column-gap: 12px;
+        grid-template-columns: var(--grid-template);
+        grid-column-gap: 0px; /* Separators handled by headers */
         background-color: var(--bg-secondary);
-        padding: 10px 15px;
+        padding: 8px 15px; /* Slightly reduced vertical padding */
         font-weight: 600;
-        font-size: 13px; /* Standardized to match content feel */
+        font-size: 13px;
         color: var(--text-secondary);
         border-bottom: 1px solid var(--border-color);
         position: sticky;
         top: 0;
         z-index: 10;
-        text-transform: none; /* Ensure no unintended casing */
+        text-transform: none;
+    }
+
+    .col-header {
+        position: relative;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding: 0 10px;
+        display: flex;
+        align-items: center;
+    }
+
+    .header-row > div:not(:last-child) {
+        border-right: 1px solid var(--border-color);
+    }
+
+    .resizer {
+        position: absolute;
+        right: -5px;
+        top: 0;
+        bottom: 0;
+        width: 10px;
+        cursor: col-resize;
+        background-color: transparent;
+        transition: background-color 0.2s;
+        z-index: 20;
+    }
+
+    .resizer:hover,
+    .resizer:active {
+        background-color: var(--accent-color);
     }
 
     .file-rows {
@@ -255,9 +374,9 @@
 
     .file-row {
         display: grid;
-        grid-template-columns: 45px 1.5fr 100px 100px 90px 2.5fr 40px;
-        grid-column-gap: 12px;
-        padding: 10px 15px; /* SPEC: Increased vertical padding to 10px */
+        grid-template-columns: var(--grid-template);
+        grid-column-gap: 0px; /* Match header */
+        padding: 10px 15px;
         border-bottom: 1px solid var(--border-color);
         align-items: center;
         transition: background-color 0.1s;
@@ -288,7 +407,16 @@
         align-items: center;
         justify-content: center;
         gap: 4px;
-        width: 45px; /* Slightly wider to accommodate two icons */
+        width: 35px;
+    }
+    
+    .file-row > div {
+        padding: 0 10px; /* Align with header padding */
+    }
+    
+    .file-row .col-icon-container,
+    .file-row .col-action {
+        padding: 0; /* Keep fixed columns non-padded relative to flex ones */
     }
 
     .col-icon {
@@ -304,6 +432,7 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        text-align: left;
     }
 
     .file-row .col-name {
