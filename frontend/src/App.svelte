@@ -114,8 +114,8 @@
     <div class="sidebar-footer">
       <button
         onclick={() => (showSettings = true)}
-        class="icon-btn settings-btn"
-        title="Settings">⚙</button
+        class="btn btn-secondary settings-btn"
+        title="Settings">⚙ Settings</button
       >
     </div>
   </aside>
@@ -231,16 +231,15 @@
   }
 
   .settings-btn {
-    font-size: 20px;
-    padding: 6px;
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-  }
-
-  .settings-btn:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
+    width: 100%;
+    padding: 10px;
+    border-radius: 2px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 14px;
   }
 
   .main-content {
