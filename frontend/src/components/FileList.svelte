@@ -23,6 +23,12 @@
         }),
     );
 
+    const counts = $derived({
+        all: files.length,
+        success: files.filter((f: any) => f.status === "success").length,
+        failed: files.filter((f: any) => f.status === "failed" || f.status === "paused").length,
+    });
+
     function getStatusIcon(status: string) {
         switch (status) {
             case "success":
@@ -87,15 +93,15 @@
     <div class="list-tabs">
         <button
             class="tab-btn {filter === 'all' ? 'active' : ''}"
-            onclick={() => (filter = "all")}>All</button
+            onclick={() => (filter = "all")}>All ({counts.all})</button
         >
         <button
             class="tab-btn {filter === 'success' ? 'active' : ''}"
-            onclick={() => (filter = "success")}>Succeeded</button
+            onclick={() => (filter = "success")}>Succeeded ({counts.success})</button
         >
         <button
             class="tab-btn {filter === 'failed' ? 'active' : ''}"
-            onclick={() => (filter = "failed")}>Failed</button
+            onclick={() => (filter = "failed")}>Failed ({counts.failed})</button
         >
         {#if filter === "failed" && filteredFiles.length > 0}
             <button
