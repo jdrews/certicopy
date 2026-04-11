@@ -1,0 +1,96 @@
+:root {
+    /* Enterprise Blue Theme */
+    --bg-primary: #121212;
+    --bg-secondary: #1E1E1E;
+    --bg-tertiary: #2D2D2D;
+    --bg-hover: #2A2D2E;
+    --text-primary: #FFFFFF;
+    --text-secondary: #969696;
+    --text-tertiary: #666666;
+    --accent-color: #0078D4;
+    --accent-muted: #005A9E;
+    --border-color: #333333;
+    --success-color: #10B981;
+    --warning-color: #F59E0B;
+    --error-color: #F44336;
+    --info-color: #2196F3;
+    --track-color: #2D2D2D;
+
+    /* Spacing */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+
+    /* Typography */
+    --font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "JetBrains Mono", "Consolas", "Monaco", monospace;
+    --font-size-sm: 12px;
+    --font-size-md: 14px;
+    --font-size-lg: 16px;
+    --font-size-xl: 20px;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-family);
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: var(--font-size-md);
+    overflow: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    margin: 0;
+    color: var(--text-primary);
+}
+
+button {
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    border-radius: 2px; /* Professional sharp-ish corners */
+    transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.btn-primary {
+    background-color: var(--accent-color);
+    color: white;
+    font-weight: 600;
+}
+
+.btn-primary:hover {
+    background-color: var(--accent-muted);
+}
+
+.btn-secondary {
+    background-color: transparent;
+    color: var(--text-secondary);
+    border: 1px solid #454545;
+}
+
+.btn-secondary:hover {
+    background-color: var(--bg-tertiary);
+    color: white;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #454545;
+}
