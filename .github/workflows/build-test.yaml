@@ -42,12 +42,12 @@ jobs:
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
+      - name: Build Wails
+        run: $(go env GOPATH)/bin/wails build -tags webkit2_41
+
       - name: Build Frontend
         working-directory: frontend
         run: npm run build
-
-      - name: Build Wails
-        run: $(go env GOPATH)/bin/wails build -tags webkit2_41
 
       - name: Build Backend
         run: go build -v ./...
