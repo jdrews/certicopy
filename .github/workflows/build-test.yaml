@@ -16,7 +16,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 25
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
@@ -33,21 +33,21 @@ jobs:
             pkg-config \
             build-essential
       
-      - name: Install Wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
-
-      - name: Build Wails
-        run: wails build -tags webkit2_41
-
-      - name: Build Frontend
-        working-directory: frontend
-        run: npm run build
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           cache: true
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Build Wails
+        run: $(go env GOPATH)/bin/wails build -tags webkit2_41
 
       - name: Build Backend
         run: go build -v ./...
