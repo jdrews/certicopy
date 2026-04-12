@@ -20,17 +20,11 @@ jobs:
     # Failure in one platform build won't impact the others
       fail-fast: false
       matrix:
-        build:
-          - name: 'certicopy'
-            platform:  'linux/amd64'
-            os: 'ubuntu-latest'
-          - name: 'certicopy'
-            platform:  'windows/amd64'
-            os: 'windows-latest'
-          - name: 'certicopy'
-            platform:  'darwin/universal'
-            os: 'macos-latest'
-
+        build: [
+          {name: certicopy, platform: linux/amd64, os: ubuntu-latest},
+          {name: certicopy, platform: windows/amd64, os: windows-latest},
+          {name: certicopy, platform: darwin/universal, os: macos-latest}
+        ] 
     runs-on: ${{ matrix.build.os }}
     steps:
       - name: Checkout
@@ -39,7 +33,7 @@ jobs:
           submodules: recursive
 
       - name: Build wails
-        uses: dAppServer/wails-build-action@v2.2
+        uses: dAppServer/wails-build-action@v3
         id: build
         with:
           build-name: ${{ matrix.build.name }}
