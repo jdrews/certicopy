@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -115,14 +116,14 @@ func TestTransferService_ProcessJob(t *testing.T) {
 }
 
 func TestTransferService_RetryLogic(t *testing.T) {
-	attempts := 0
+	var attempts int32
 	mockCopier := &MockCopier{
 		copyWithProgressFunc: func(ctx context.Context, src string, dst string, opts core.CopyOptions, progressChan chan<- core.Progress) error {
-			attempts++
+			atomic.AddInt32(&attempts, 1)
 			if progressChan != nil {
 				close(progressChan)
 			}
-			if attempts == 1 {
+			if atomic.LoadInt32(&attempts) == 1 {
 				return &models.CopyError{Code: models.ErrCodeUnknown, Message: "retryable error"}
 			}
 			return nil
@@ -148,7 +149,7 @@ func TestTransferService_RetryLogic(t *testing.T) {
 	// But let's see if 100ms is enough for the first failure.
 	time.Sleep(100 * time.Millisecond)
 	
-	if attempts < 1 {
+	if atomic.LoadInt32(&attempts) < 1 {
 		t.Error("Expected at least one attempt by now")
 	}
 }

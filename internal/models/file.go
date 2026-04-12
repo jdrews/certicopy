@@ -30,3 +30,11 @@ type FileInfo struct {
 	TransferCompleted bool           `json:"transferCompleted"`
 	EndHashVerified   bool           `json:"endHashVerified"`
 }
+
+// Clone creates a shallow copy of the FileInfo.
+// Since FileInfo has no pointer or reference fields (like slices/maps),
+// a shallow copy is sufficient for a deep copy.
+func (f *FileInfo) Clone() *FileInfo {
+	clone := *f
+	return &clone
+}

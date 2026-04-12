@@ -18,6 +18,27 @@ type TransferJob struct {
 	ErrorCode   string         `json:"errorCode,omitempty"`
 }
 
+// Clone creates a deep copy of the TransferJob
+func (j *TransferJob) Clone() *TransferJob {
+	clone := *j
+	
+	// Deep copy Sources
+	if j.Sources != nil {
+		clone.Sources = make([]string, len(j.Sources))
+		copy(clone.Sources, j.Sources)
+	}
+	
+	// Deep copy Files
+	if j.Files != nil {
+		clone.Files = make([]*FileInfo, len(j.Files))
+		for i, f := range j.Files {
+			clone.Files[i] = f.Clone()
+		}
+	}
+	
+	return &clone
+}
+
 // Stats returns the current statistics for the job
 func (j *TransferJob) Stats() (filesCopied int64, bytesCopied int64, failed int64) {
 	for _, f := range j.Files {
