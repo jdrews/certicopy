@@ -50,13 +50,25 @@ func (q *TransferQueue) Pop() *models.TransferJob {
 	return job
 }
 
-// GetAll returns all jobs in the queue
+// GetAll returns a shallow slice copy of the queue's live job pointers.
+// Callers that mutate job fields must hold TransferService.mutex.
 func (q *TransferQueue) GetAll() []*models.TransferJob {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
-	// Return a copy to avoid race conditions
 	jobs := make([]*models.TransferJob, len(q.jobs))
 	copy(jobs, q.jobs)
+	return jobs
+}
+
+// GetAllClones returns deep copies of all jobs, safe for external reads
+// (e.g., UI serialization) without holding any additional lock.
+func (q *TransferQueue) GetAllClones() []*models.TransferJob {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	jobs := make([]*models.TransferJob, len(q.jobs))
+	for i, j := range q.jobs {
+		jobs[i] = j.Clone()
+	}
 	return jobs
 }
 

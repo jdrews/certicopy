@@ -38,7 +38,7 @@ type TransferService struct {
 	running         bool
 	cancel          context.CancelFunc
 	jobAdded        chan struct{}
-	mutex           sync.Mutex
+	mutex           sync.RWMutex
 }
 
 // NewTransferService creates a new TransferService
@@ -161,8 +161,8 @@ func (s *TransferService) processQueue() {
 	}()
 
 	for {
-		// Get next pending job (simple Peek for now, assuming only one consumer)
-		job := s.queue.Peek()
+		// Get next pending job under the service mutex so we don't race on job.Status
+		job := s.findPendingJob()
 		if job == nil {
 			core.Log.Info("processQueue: Queue empty, waiting for signal")
 			// Wait for a signal that a job was added
@@ -186,29 +186,61 @@ func (s *TransferService) processQueue() {
 	}
 }
 
+// findPendingJob returns the first job with status Pending or InProgress,
+// reading job.Status under s.mutex to avoid races with control methods.
+func (s *TransferService) findPendingJob() *models.TransferJob {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	for _, j := range s.queue.GetAll() {
+		if j.Status == models.StatusPending || j.Status == models.StatusInProgress {
+			return j
+		}
+	}
+	return nil
+}
+
 // processJob handles the transfer of a single job
 func (s *TransferService) processJob(job *models.TransferJob) bool {
+	s.mutex.Lock()
+	fileCountLogging := len(job.Files)
+	s.mutex.Unlock()
 	core.Log.WithFields(logrus.Fields{
 		"jobId":     job.ID,
-		"fileCount": len(job.Files),
+		"fileCount": fileCountLogging,
 	}).Debug("processJob: Starting")
 
 	// Update job status
+	s.mutex.Lock()
 	job.Status = models.StatusInProgress
 	job.StartedAt = time.Now().UnixMilli()
+	s.mutex.Unlock()
 	s.emitQueueUpdate()
 
 	// Prepare for cancellation
 	ctx, cancel := context.WithCancel(context.Background())
+	s.mutex.Lock()
 	s.cancel = cancel
-	defer cancel()
+	s.mutex.Unlock()
+	defer func() {
+		s.mutex.Lock()
+		s.cancel = nil
+		s.mutex.Unlock()
+		cancel()
+	}()
 
 	consecutiveSysFailures := 0
 
 	// Process files
-	for i := range job.Files {
+	s.mutex.Lock()
+	fileCount := len(job.Files)
+	s.mutex.Unlock()
+	
+	for i := 0; i < fileCount; i++ {
+		s.mutex.Lock()
 		file := job.Files[i]
-		if file.Status == models.StatusSuccess || file.Status == models.StatusSkipped {
+		status := file.Status
+		s.mutex.Unlock()
+		if status == models.StatusSuccess || status == models.StatusSkipped {
 			continue
 		}
 
@@ -223,30 +255,37 @@ func (s *TransferService) processJob(job *models.TransferJob) bool {
 
 			if consecutiveSysFailures >= 3 { // Max consecutive failures
 				core.Log.WithField("jobId", job.ID).Warn("Circuit breaker triggered, pausing job")
+				s.mutex.Lock()
 				job.Status = models.StatusFailed
 				job.Error = "Auto-paused due to consecutive systemic failures"
 				if copyErr != nil {
 					job.ErrorCode = string(copyErr.Code)
 				}
+				s.mutex.Unlock()
 				s.pauseActiveJob(job)
 				return false
 			}
 
 			// Check if we should stop processing the entire job
 			if errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "context canceled") {
+				s.mutex.Lock()
+				status := job.Status
+				s.mutex.Unlock()
 				core.Log.WithFields(logrus.Fields{
 					"jobId":  job.ID,
-					"status": job.Status,
+					"status": status,
 				}).Debug("processJob: Context cancelled, checking job status")
 
-				if job.Status == models.StatusPaused || job.Status == models.StatusPending {
+				if status == models.StatusPaused || status == models.StatusPending {
 					s.emitQueueUpdate()
 					return false // Stop current processing loop, let queue restart/continue
 				}
 				// Job was canceled terminaly
+				s.mutex.Lock()
 				job.Status = models.StatusFailed
 				job.Error = "cancelled"
 				job.CompletedAt = time.Now().UnixMilli()
+				s.mutex.Unlock()
 				s.emitQueueUpdate()
 				return true // Continue to next job in queue
 			}
@@ -259,12 +298,14 @@ func (s *TransferService) processJob(job *models.TransferJob) bool {
 	settings := s.settingsService.Get()
 	if settings.EndCheck {
 		hasSuccessFiles := false
+		s.mutex.Lock()
 		for _, file := range job.Files {
 			if file.Status == models.StatusSuccess {
 				hasSuccessFiles = true
 				break
 			}
 		}
+		s.mutex.Unlock()
 
 		if hasSuccessFiles && s.processHashPhase(ctx, job) == false {
 			return false // Cancelled or paused during hashing
@@ -281,6 +322,7 @@ func (s *TransferService) processJob(job *models.TransferJob) bool {
 func (s *TransferService) processHashPhase(ctx context.Context, job *models.TransferJob) bool {
 	core.Log.WithField("jobId", job.ID).Info("Starting end hash check phase")
 
+	s.mutex.Lock()
 	job.Status = models.StatusHashing
 	job.BytesCopied = 0
 
@@ -295,16 +337,21 @@ func (s *TransferService) processHashPhase(ctx context.Context, job *models.Tran
 			file.BytesCopied = 0
 			file.Status = models.StatusHashing
 			file.ErrorMessage = "verifying integrity..."
+			// we can emit later, but emit doesn't block much if it uses runtime
 			s.emitFileUpdate(file)
 		}
 	}
 	job.TotalBytes = hashTotalBytes
+	s.mutex.Unlock()
 	s.emitQueueUpdate()
 
 	settings := s.settingsService.Get()
 	for i := range job.Files {
+		s.mutex.Lock()
 		file := job.Files[i]
-		if file.Status != models.StatusHashing {
+		fileStatus := file.Status
+		s.mutex.Unlock()
+		if fileStatus != models.StatusHashing {
 			continue // Only re-hash files that successfully copied
 		}
 
@@ -315,7 +362,9 @@ func (s *TransferService) processHashPhase(ctx context.Context, job *models.Tran
 
 		progressChan := make(chan core.Progress)
 		errChan := make(chan error)
+		s.mutex.Lock()
 		file.ErrorMessage = "hashing..." // Clear the previous "transferred" message
+		s.mutex.Unlock()
 		s.emitFileUpdate(file)
 
 		go func() {
@@ -331,7 +380,9 @@ func (s *TransferService) processHashPhase(ctx context.Context, job *models.Tran
 
 		for p := range progressChan {
 			// p.BytesCopied contains BytesRead for this file (up to file.Size * 2)
+			s.mutex.Lock()
 			file.BytesCopied = p.BytesCopied
+			s.mutex.Unlock()
 
 			if time.Since(lastUpdate) > 200*time.Millisecond {
 				s.updateJobProgress(job)
@@ -343,10 +394,12 @@ func (s *TransferService) processHashPhase(ctx context.Context, job *models.Tran
 		}
 
 		err := <-errChan
+		s.mutex.Lock()
 		if err != nil {
 			if errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "context canceled") {
 				file.Status = models.StatusPaused
 				job.Status = models.StatusPaused
+				s.mutex.Unlock()
 				s.emitFileUpdate(file)
 				s.emitQueueUpdate()
 				return false
@@ -360,6 +413,7 @@ func (s *TransferService) processHashPhase(ctx context.Context, job *models.Tran
 			file.EndHashVerified = true
 			file.ErrorMessage = "success: integrity verified"
 		}
+		s.mutex.Unlock()
 
 		s.updateJobProgress(job)
 		s.emitFileUpdate(file)
@@ -368,6 +422,7 @@ func (s *TransferService) processHashPhase(ctx context.Context, job *models.Tran
 
 	// Revert job tracking back to normal size so "Complete" shows correct total bytes
 	var originalTotalBytes int64
+	s.mutex.Lock()
 	for _, file := range job.Files {
 		// We use file.Size, the true original size
 		originalTotalBytes += file.Size
@@ -378,6 +433,7 @@ func (s *TransferService) processHashPhase(ctx context.Context, job *models.Tran
 	}
 	job.TotalBytes = originalTotalBytes
 	job.BytesCopied = originalTotalBytes // Reset so percentage is 100%
+	s.mutex.Unlock()
 	s.emitQueueUpdate()
 
 	return true
@@ -421,8 +477,10 @@ func (s *TransferService) processFile(ctx context.Context, job *models.TransferJ
 		"file":  file.Name,
 	}).Debug("Processing file")
 
+	s.mutex.Lock()
 	file.Status = models.StatusInProgress
 	file.ErrorMessage = "in progress"
+	s.mutex.Unlock()
 	s.emitFileUpdate(file)
 	s.emitQueueUpdate()
 
@@ -454,7 +512,9 @@ func (s *TransferService) processFile(ctx context.Context, job *models.TransferJ
 	var lastProgress core.Progress
 
 	for p := range progressChan {
+		s.mutex.Lock()
 		file.BytesCopied = p.BytesCopied
+		s.mutex.Unlock()
 		lastProgress = p
 
 		if time.Since(lastUpdate) > 200*time.Millisecond {
@@ -476,6 +536,8 @@ func (s *TransferService) processFile(ctx context.Context, job *models.TransferJ
 }
 
 func (s *TransferService) updateJobProgress(job *models.TransferJob) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	var totalCopied int64
 	for _, f := range job.Files {
 		totalCopied += f.BytesCopied
@@ -484,6 +546,8 @@ func (s *TransferService) updateJobProgress(job *models.TransferJob) {
 }
 
 func (s *TransferService) handleCopyResult(file *models.FileInfo, err error, lastProgress core.Progress) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	if err != nil {
 		if errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "context canceled") {
 			file.Status = models.StatusPaused
@@ -508,6 +572,7 @@ func (s *TransferService) handleCopyResult(file *models.FileInfo, err error, las
 }
 
 func (s *TransferService) finalizeJobStatus(job *models.TransferJob) {
+	s.mutex.Lock()
 	job.Status = models.StatusSuccess
 	for _, file := range job.Files {
 		if file.Status == models.StatusFailed {
@@ -516,6 +581,7 @@ func (s *TransferService) finalizeJobStatus(job *models.TransferJob) {
 		}
 	}
 	job.CompletedAt = time.Now().UnixMilli()
+	s.mutex.Unlock()
 	s.emitQueueUpdate()
 }
 
@@ -523,7 +589,11 @@ func (s *TransferService) emitQueueUpdate() {
 	if s.ctx == nil {
 		return
 	}
-	runtime.EventsEmit(s.ctx, "queue:updated", s.queue.GetAll())
+	// RLock: we only read job/file fields to clone them for the UI event.
+	s.mutex.RLock()
+	data := s.queue.GetAllClones()
+	s.mutex.RUnlock()
+	runtime.EventsEmit(s.ctx, "queue:updated", data)
 }
 
 func (s *TransferService) emitFileUpdate(file *models.FileInfo) {
@@ -534,17 +604,25 @@ func (s *TransferService) emitFileUpdate(file *models.FileInfo) {
 
 func (s *TransferService) emitProgress(job *models.TransferJob, p core.Progress) {
 	if s.ctx != nil {
+		s.mutex.RLock()
+		jobId := job.ID
+		bytesCopied := job.BytesCopied
+		totalBytes := job.TotalBytes
+		s.mutex.RUnlock()
+		
 		runtime.EventsEmit(s.ctx, "transfer:progress", map[string]interface{}{
-			"jobId":       job.ID,
-			"bytesCopied": job.BytesCopied,
-			"totalBytes":  job.TotalBytes,
+			"jobId":       jobId,
+			"bytesCopied": bytesCopied,
+			"totalBytes":  totalBytes,
 			"speed":       p.Speed,
 		})
 	}
 }
 
 func (s *TransferService) GetQueue() []*models.TransferJob {
-	return s.queue.GetAll()
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	return s.queue.GetAllClones()
 }
 
 func (s *TransferService) Pause(jobID string) {
@@ -554,7 +632,11 @@ func (s *TransferService) Pause(jobID string) {
 		return
 	}
 
-	switch job.Status {
+	s.mutex.Lock()
+	status := job.Status
+	s.mutex.Unlock()
+
+	switch status {
 	case models.StatusInProgress:
 		s.pauseActiveJob(job)
 	case models.StatusPending:
@@ -562,7 +644,7 @@ func (s *TransferService) Pause(jobID string) {
 	default:
 		core.Log.WithFields(logrus.Fields{
 			"jobId":  job.ID,
-			"status": job.Status,
+			"status": status,
 		}).Warn("Cannot pause job in status")
 	}
 }
@@ -580,6 +662,7 @@ func (s *TransferService) findJob(jobID string) *models.TransferJob {
 }
 
 func (s *TransferService) pauseActiveJob(job *models.TransferJob) {
+	s.mutex.Lock()
 	job.Status = models.StatusPaused
 	if s.cancel != nil {
 		s.cancel()
@@ -590,11 +673,14 @@ func (s *TransferService) pauseActiveJob(job *models.TransferJob) {
 			job.Files[i].ErrorMessage = "paused"
 		}
 	}
+	s.mutex.Unlock()
 	s.emitQueueUpdate()
 }
 
 func (s *TransferService) pausePendingJob(job *models.TransferJob) {
+	s.mutex.Lock()
 	job.Status = models.StatusPaused
+	s.mutex.Unlock()
 	s.emitQueueUpdate()
 }
 
@@ -627,6 +713,9 @@ func (s *TransferService) Resume(jobID string) {
 }
 
 func (s *TransferService) tryResumeJob(job *models.TransferJob) bool {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	
 	if job.Status != models.StatusPaused && job.Status != models.StatusFailed {
 		return false
 	}
@@ -675,7 +764,9 @@ func (s *TransferService) findJobToCancel(jobID string) *models.TransferJob {
 		}
 		return nil
 	}
-	// Default legacy behavior
+	// Default legacy behavior - find first active job
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	for _, j := range s.queue.GetAll() {
 		if j.Status == models.StatusInProgress || j.Status == models.StatusPaused || j.Status == models.StatusPending {
 			return j
@@ -685,6 +776,7 @@ func (s *TransferService) findJobToCancel(jobID string) *models.TransferJob {
 }
 
 func (s *TransferService) cancelSpecificJob(job *models.TransferJob) {
+	s.mutex.Lock()
 	oldStatus := job.Status
 	job.Status = models.StatusFailed
 	job.Error = "cancelled"
@@ -700,6 +792,7 @@ func (s *TransferService) cancelSpecificJob(job *models.TransferJob) {
 			job.Files[i].ErrorMessage = "cancelled"
 		}
 	}
+	s.mutex.Unlock()
 	s.emitQueueUpdate()
 }
 
@@ -710,6 +803,7 @@ func (s *TransferService) RemoveFileFromJob(jobID string, sourcePath string) {
 		return
 	}
 
+	s.mutex.Lock()
 	filtered := make([]*models.FileInfo, 0, len(job.Files))
 	for _, f := range job.Files {
 		if f.SourcePath != sourcePath {
@@ -724,6 +818,7 @@ func (s *TransferService) RemoveFileFromJob(jobID string, sourcePath string) {
 		newTotalSize += f.Size
 	}
 	job.TotalBytes = newTotalSize
+	s.mutex.Unlock()
 	s.updateJobProgress(job)
 
 	s.emitQueueUpdate()
