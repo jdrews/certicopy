@@ -76,47 +76,43 @@ jobs:
           node-version: '25'
           # Use build-args to pass the webkit2_41 tag needed for Ubuntu 24.04
           build-args: ${{ matrix.build.os == 'ubuntu-latest' && '-tags webkit2_41' || '' }}
-      
-      - name: Debug - List build directory
-        shell: bash
-        run: |
-          echo "Matrix Platform: ${{ matrix.build.platform }}"
-          PLATFORM_DIR=$(echo "${{ matrix.build.platform }}" | tr '/' '-')
-          echo "Calculated Platform Dir: ${PLATFORM_DIR}"
-          echo "Expected Source Dir: build/bin/${PLATFORM_DIR}"
-          echo ""
-          echo "--- Binary Search (including directories) ---"
-          find build -name "certicopy*"
-          echo ""
-          echo "--- Recursive listing of build/bin ---"
-          ls -R build/bin
 
       - name: Prepare Artifacts
         shell: bash
         run: |
-          # The subdirectory name matches the platform with slashes replaced by dashes
-          PLATFORM_DIR=$(echo "${{ matrix.build.platform }}" | tr '/' '-')
-          SOURCE_DIR="build/bin/${PLATFORM_DIR}"
+          # Based on debug logs, all artifacts are directly in build/bin/
+          SOURCE_DIR="build/bin"
           
-          echo "Expected source directory: ${SOURCE_DIR}"
-
           if [[ "${{ matrix.build.os }}" == *"windows"* ]]; then
-            # Windows: built file is certicopy.exe in the platform subdir
-            mv "${SOURCE_DIR}/${{ matrix.build.name }}.exe" "build/bin/${BASE_NAME}.exe"
-            echo "ASSET_PATH=build/bin/${BASE_NAME}.exe" >> $GITHUB_ENV
-          elif [[ "${{ matrix.build.os }}" == *"macos"* ]]; then
-            # macOS: can be a .app folder or a binary
-            if [ -d "${SOURCE_DIR}/${{ matrix.build.name }}.app" ]; then
-              (cd "${SOURCE_DIR}" && zip -r "${{ github.workspace }}/build/bin/${BASE_NAME}.app.zip" "${{ matrix.build.name }}.app")
-              echo "ASSET_PATH=build/bin/${BASE_NAME}.app.zip" >> $GITHUB_ENV
+            # Windows: built file was found as 'certicopy' or 'certicopy.exe'. 
+            # We ensure it has a proper .exe extension for the release.
+            if [ -f "${SOURCE_DIR}/${{ matrix.build.name }}.exe" ]; then
+              mv "${SOURCE_DIR}/${{ matrix.build.name }}.exe" "${SOURCE_DIR}/${BASE_NAME}.exe"
             else
-              mv "${SOURCE_DIR}/${{ matrix.build.name }}" "build/bin/${BASE_NAME}"
-              echo "ASSET_PATH=build/bin/${BASE_NAME}" >> $GITHUB_ENV
+              mv "${SOURCE_DIR}/${{ matrix.build.name }}" "${SOURCE_DIR}/${BASE_NAME}.exe"
             fi
+            echo "ASSET_PATH=${SOURCE_DIR}/${BASE_NAME}.exe" >> $GITHUB_ENV
+            
+          elif [[ "${{ matrix.build.os }}" == *"macos"* ]]; then
+            # macOS: debug showed 'certicopy.app.zip' already exists (likely from package: true)
+            if [ -f "${SOURCE_DIR}/${{ matrix.build.name }}.app.zip" ]; then
+              mv "${SOURCE_DIR}/${{ matrix.build.name }}.app.zip" "${SOURCE_DIR}/${BASE_NAME}.app.zip"
+            elif [ -d "${SOURCE_DIR}/${{ matrix.build.name }}.app" ]; then
+              (cd "${SOURCE_DIR}" && zip -r "${BASE_NAME}.app.zip" "${{ matrix.build.name }}.app")
+            else
+              mv "${SOURCE_DIR}/${{ matrix.build.name }}" "${SOURCE_DIR}/${BASE_NAME}"
+            fi
+            
+            if [ -f "${SOURCE_DIR}/${BASE_NAME}.app.zip" ]; then
+              echo "ASSET_PATH=${SOURCE_DIR}/${BASE_NAME}.app.zip" >> $GITHUB_ENV
+            else
+              echo "ASSET_PATH=${SOURCE_DIR}/${BASE_NAME}" >> $GITHUB_ENV
+            fi
+            
           else
-            # Linux: built binary in platform subdir
-            mv "${SOURCE_DIR}/${{ matrix.build.name }}" "build/bin/${BASE_NAME}"
-            echo "ASSET_PATH=build/bin/${BASE_NAME}" >> $GITHUB_ENV
+            # Linux: rename binary to be descriptive
+            mv "${SOURCE_DIR}/${{ matrix.build.name }}" "${SOURCE_DIR}/${BASE_NAME}"
+            echo "ASSET_PATH=${SOURCE_DIR}/${BASE_NAME}" >> $GITHUB_ENV
           fi
 
       - name: Upload to Release
