@@ -80,23 +80,28 @@ jobs:
       - name: Prepare Artifacts
         shell: bash
         run: |
-          cd build/bin
+          # The subdirectory name matches the platform with slashes replaced by dashes
+          PLATFORM_DIR=$(echo "${{ matrix.build.platform }}" | tr '/' '-')
+          SOURCE_DIR="build/bin/${PLATFORM_DIR}"
+          
+          echo "Expected source directory: ${SOURCE_DIR}"
+
           if [[ "${{ matrix.build.os }}" == *"windows"* ]]; then
-            # Rename exe and set as asset
-            mv "${{ matrix.build.name }}.exe" "${BASE_NAME}.exe"
+            # Windows: built file is certicopy.exe in the platform subdir
+            mv "${SOURCE_DIR}/${{ matrix.build.name }}.exe" "build/bin/${BASE_NAME}.exe"
             echo "ASSET_PATH=build/bin/${BASE_NAME}.exe" >> $GITHUB_ENV
           elif [[ "${{ matrix.build.os }}" == *"macos"* ]]; then
-            # Zip .app bundle if it exists, otherwise rename binary
-            if [ -d "${{ matrix.build.name }}.app" ]; then
-              zip -r "${BASE_NAME}.app.zip" "${{ matrix.build.name }}.app"
+            # macOS: can be a .app folder or a binary
+            if [ -d "${SOURCE_DIR}/${{ matrix.build.name }}.app" ]; then
+              (cd "${SOURCE_DIR}" && zip -r "${{ github.workspace }}/build/bin/${BASE_NAME}.app.zip" "${{ matrix.build.name }}.app")
               echo "ASSET_PATH=build/bin/${BASE_NAME}.app.zip" >> $GITHUB_ENV
             else
-              mv "${{ matrix.build.name }}" "${BASE_NAME}"
+              mv "${SOURCE_DIR}/${{ matrix.build.name }}" "build/bin/${BASE_NAME}"
               echo "ASSET_PATH=build/bin/${BASE_NAME}" >> $GITHUB_ENV
             fi
           else
-            # Linux: rename binary
-            mv "${{ matrix.build.name }}" "${BASE_NAME}"
+            # Linux: built binary in platform subdir
+            mv "${SOURCE_DIR}/${{ matrix.build.name }}" "build/bin/${BASE_NAME}"
             echo "ASSET_PATH=build/bin/${BASE_NAME}" >> $GITHUB_ENV
           fi
 
