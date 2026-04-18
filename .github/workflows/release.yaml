@@ -76,6 +76,20 @@ jobs:
           node-version: '25'
           # Use build-args to pass the webkit2_41 tag needed for Ubuntu 24.04
           build-args: ${{ matrix.build.os == 'ubuntu-latest' && '-tags webkit2_41' || '' }}
+      
+      - name: Debug - List build directory
+        shell: bash
+        run: |
+          echo "Matrix Platform: ${{ matrix.build.platform }}"
+          PLATFORM_DIR=$(echo "${{ matrix.build.platform }}" | tr '/' '-')
+          echo "Calculated Platform Dir: ${PLATFORM_DIR}"
+          echo "Expected Source Dir: build/bin/${PLATFORM_DIR}"
+          echo ""
+          echo "--- Binary Search (including directories) ---"
+          find build -name "certicopy*"
+          echo ""
+          echo "--- Recursive listing of build/bin ---"
+          ls -R build/bin
 
       - name: Prepare Artifacts
         shell: bash
