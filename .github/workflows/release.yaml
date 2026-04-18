@@ -9,6 +9,7 @@ on:
       tag:
         description: 'New tag name'
         required: true
+        default: 'v0.0.0'
 
 permissions:
   contents: write
@@ -50,6 +51,14 @@ jobs:
           else
             # Extract tag from the git ref for tag pushes
             echo "TAG_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          fi
+
+      - name: Validate Tag Name
+        shell: bash
+        run: |
+          if [[ ! "${TAG_NAME}" =~ ^v ]]; then
+            echo "::error::Tag name '${TAG_NAME}' is invalid. It must start with 'v' (e.g., v1.2.3)."
+            exit 1
           fi
 
       - name: Set Binary Name
@@ -122,5 +131,6 @@ jobs:
           tag_name: ${{ env.TAG_NAME }}
           name: ${{ env.TAG_NAME }}
           files: ${{ env.ASSET_PATH }}
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
