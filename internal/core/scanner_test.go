@@ -10,10 +10,13 @@ import (
 
 func TestScanner_ScanSingleFile(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	afero.WriteFile(fs, "/src/file1.txt", []byte("hello"), 0644)
+	base, _ := filepath.Abs(".")
+	srcFile := filepath.Join(base, "src", "file1.txt")
+	dstDir := filepath.Join(base, "dest")
+	afero.WriteFile(fs, srcFile, []byte("hello"), 0644)
 
 	s := NewScanner(fs)
-	files, count, size, err := s.Scan([]string{"/src/file1.txt"}, "/dest")
+	files, count, size, err := s.Scan([]string{srcFile}, dstDir)
 
 	if err != nil {
 		t.Fatalf("Scan failed: %v", err)
@@ -31,22 +34,26 @@ func TestScanner_ScanSingleFile(t *testing.T) {
 		t.Fatalf("Expected 1 file in result, got %d", len(files))
 	}
 
-	if files[0].SourcePath != "/src/file1.txt" {
-		t.Errorf("Expected source /src/file1.txt, got %s", files[0].SourcePath)
+	if files[0].SourcePath != srcFile {
+		t.Errorf("Expected source %s, got %s", srcFile, files[0].SourcePath)
 	}
 
-	if files[0].DestPath != filepath.FromSlash("/dest/file1.txt") {
-		t.Errorf("Expected dest /dest/file1.txt, got %s", files[0].DestPath)
+	expectedDest := filepath.Join(dstDir, "file1.txt")
+	if files[0].DestPath != expectedDest {
+		t.Errorf("Expected dest %s, got %s", expectedDest, files[0].DestPath)
 	}
 }
 
 func TestScanner_ScanDirectory(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	afero.WriteFile(fs, "/src/dir/file1.txt", []byte("file1"), 0644)
-	afero.WriteFile(fs, "/src/dir/subdir/file2.txt", []byte("file2"), 0644)
+	base, _ := filepath.Abs(".")
+	srcDir := filepath.Join(base, "src", "dir")
+	dstDir := filepath.Join(base, "dest")
+	afero.WriteFile(fs, filepath.Join(srcDir, "file1.txt"), []byte("file1"), 0644)
+	afero.WriteFile(fs, filepath.Join(srcDir, "subdir", "file2.txt"), []byte("file2"), 0644)
 
 	s := NewScanner(fs)
-	files, count, size, err := s.Scan([]string{"/src/dir"}, "/dest")
+	files, count, size, err := s.Scan([]string{srcDir}, dstDir)
 
 	if err != nil {
 		t.Fatalf("Scan failed: %v", err)
@@ -67,14 +74,14 @@ func TestScanner_ScanDirectory(t *testing.T) {
 	for _, f := range files {
 		if f.Name == "file1.txt" {
 			foundFile1 = true
-			expectedDest := filepath.FromSlash("/dest/dir/file1.txt")
+			expectedDest := filepath.Join(dstDir, "dir", "file1.txt")
 			if f.DestPath != expectedDest {
 				t.Errorf("Expected dest %s for file1, got %s", expectedDest, f.DestPath)
 			}
 		}
 		if f.Name == "file2.txt" {
 			foundFile2 = true
-			expectedDest := filepath.FromSlash("/dest/dir/subdir/file2.txt")
+			expectedDest := filepath.Join(dstDir, "dir", "subdir", "file2.txt")
 			if f.DestPath != expectedDest {
 				t.Errorf("Expected dest %s for file2, got %s", expectedDest, f.DestPath)
 			}
@@ -88,11 +95,15 @@ func TestScanner_ScanDirectory(t *testing.T) {
 
 func TestScanner_ScanMultipleSources(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	afero.WriteFile(fs, "/src/file1.txt", []byte("a"), 0644)
-	afero.WriteFile(fs, "/other/file2.txt", []byte("b"), 0644)
+	base, _ := filepath.Abs(".")
+	srcFile1 := filepath.Join(base, "src", "file1.txt")
+	srcFile2 := filepath.Join(base, "other", "file2.txt")
+	dstDir := filepath.Join(base, "dest")
+	afero.WriteFile(fs, srcFile1, []byte("a"), 0644)
+	afero.WriteFile(fs, srcFile2, []byte("b"), 0644)
 
 	s := NewScanner(fs)
-	files, count, size, err := s.Scan([]string{"/src/file1.txt", "/other/file2.txt"}, "/dest")
+	files, count, size, err := s.Scan([]string{srcFile1, srcFile2}, dstDir)
 
 	if err != nil {
 		t.Fatalf("Scan failed: %v", err)

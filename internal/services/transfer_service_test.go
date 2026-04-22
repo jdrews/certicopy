@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync/atomic"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -67,7 +68,10 @@ func TestTransferService_AddTransfer(t *testing.T) {
 	settings := NewSettingsServiceWithConfigPath("/tmp/settings.json")
 	s := NewTransferServiceWithDeps(core.NewTransferQueue(), &MockCopier{}, mockScanner, afero.NewMemMapFs(), settings)
 
-	id, err := s.AddTransfer([]string{"/src/f1"}, "/dest", false)
+	base, _ := filepath.Abs(".")
+	srcDir := filepath.Join(base, "src", "f1")
+	dstDir := filepath.Join(base, "dest")
+	id, err := s.AddTransfer([]string{srcDir}, dstDir, false)
 	if err != nil {
 		t.Fatalf("AddTransfer failed: %v", err)
 	}
@@ -92,16 +96,22 @@ func TestTransferService_ProcessJob(t *testing.T) {
 			return nil
 		},
 	}
+	base, _ := filepath.Abs(".")
+	srcFile := filepath.Join(base, "s", "f.txt")
+	dstFile := filepath.Join(base, "d", "f.txt")
+	srcDir := filepath.Join(base, "s")
+	dstDir := filepath.Join(base, "d")
+
 	mockScanner := &MockScanner{
 		scanFunc: func(sources []string, destRoot string) ([]*models.FileInfo, int64, int64, error) {
-			return []*models.FileInfo{{Name: "f.txt", SourcePath: "/s/f.txt", DestPath: "/d/f.txt", Size: 100}}, 1, 100, nil
+			return []*models.FileInfo{{Name: "f.txt", SourcePath: srcFile, DestPath: dstFile, Size: 100}}, 1, 100, nil
 		},
 	}
 
-	settings := NewSettingsServiceWithConfigPath("/tmp/settings.json")
+	settings := NewSettingsServiceWithConfigPath(filepath.Join(base, "tmp", "settings.json"))
 	s := NewTransferServiceWithDeps(core.NewTransferQueue(), mockCopier, mockScanner, afero.NewMemMapFs(), settings)
 
-	_, _ = s.AddTransfer([]string{"/s/f.txt"}, "/d", false)
+	_, _ = s.AddTransfer([]string{srcDir}, dstDir, false)
 	
 	// Start processing
 	s.StartQueue()
@@ -129,19 +139,25 @@ func TestTransferService_RetryLogic(t *testing.T) {
 			return nil
 		},
 	}
+	base, _ := filepath.Abs(".")
+	srcFile := filepath.Join(base, "s", "f.txt")
+	dstFile := filepath.Join(base, "d", "f.txt")
+	srcDir := filepath.Join(base, "s")
+	dstDir := filepath.Join(base, "d")
+
 	mockScanner := &MockScanner{
 		scanFunc: func(sources []string, destRoot string) ([]*models.FileInfo, int64, int64, error) {
-			return []*models.FileInfo{{Name: "f.txt", SourcePath: "/s/f.txt", DestPath: "/d/f.txt", Size: 10}}, 1, 10, nil
+			return []*models.FileInfo{{Name: "f.txt", SourcePath: srcFile, DestPath: dstFile, Size: 10}}, 1, 10, nil
 		},
 	}
 
-	settings := NewSettingsServiceWithConfigPath("/tmp/settings.json")
+	settings := NewSettingsServiceWithConfigPath(filepath.Join(base, "tmp", "settings.json"))
 	// Use small retry delay if possible, but it's hardcoded to 2s.
 	// I'll just check if it was called twice eventually or skip long wait in test by overriding if needed.
 	// For now, I'll allow one retry and wait.
 	s := NewTransferServiceWithDeps(core.NewTransferQueue(), mockCopier, mockScanner, afero.NewMemMapFs(), settings)
 
-	_, _ = s.AddTransfer([]string{"/s"}, "/d", false)
+	_, _ = s.AddTransfer([]string{srcDir}, dstDir, false)
 	s.StartQueue()
 
 	// Need to wait enough for 1 retry (base delay 2s)
@@ -164,21 +180,25 @@ func TestTransferService_CircuitBreaker(t *testing.T) {
 			return &models.CopyError{Code: models.ErrCodeDiskFull, Message: "fatal"}
 		},
 	}
+	base, _ := filepath.Abs(".")
+	srcDir := filepath.Join(base, "s")
+	dstDir := filepath.Join(base, "d")
+
 	mockScanner := &MockScanner{
 		scanFunc: func(sources []string, destRoot string) ([]*models.FileInfo, int64, int64, error) {
 			return []*models.FileInfo{
-				{Name: "f1", SourcePath: "/s/f1", DestPath: "/d/f1", Size: 10},
-				{Name: "f2", SourcePath: "/s/f2", DestPath: "/d/f2", Size: 10},
-				{Name: "f3", SourcePath: "/s/f3", DestPath: "/d/f3", Size: 10},
-				{Name: "f4", SourcePath: "/s/f4", DestPath: "/d/f4", Size: 10},
+				{Name: "f1", SourcePath: filepath.Join(srcDir, "f1"), DestPath: filepath.Join(dstDir, "f1"), Size: 10},
+				{Name: "f2", SourcePath: filepath.Join(srcDir, "f2"), DestPath: filepath.Join(dstDir, "f2"), Size: 10},
+				{Name: "f3", SourcePath: filepath.Join(srcDir, "f3"), DestPath: filepath.Join(dstDir, "f3"), Size: 10},
+				{Name: "f4", SourcePath: filepath.Join(srcDir, "f4"), DestPath: filepath.Join(dstDir, "f4"), Size: 10},
 			}, 4, 40, nil
 		},
 	}
 
-	settings := NewSettingsServiceWithConfigPath("/tmp/settings_cb.json")
+	settings := NewSettingsServiceWithConfigPath(filepath.Join(base, "tmp", "settings_cb.json"))
 	s := NewTransferServiceWithDeps(core.NewTransferQueue(), mockCopier, mockScanner, afero.NewMemMapFs(), settings)
 
-	_, _ = s.AddTransfer([]string{"/s"}, "/d", false)
+	_, _ = s.AddTransfer([]string{srcDir}, dstDir, false)
 	s.StartQueue()
 
 	time.Sleep(200 * time.Millisecond)
@@ -205,16 +225,20 @@ func TestTransferService_PauseAndResume(t *testing.T) {
 			}
 		},
 	}
+	base, _ := filepath.Abs(".")
+	srcDir := filepath.Join(base, "s")
+	dstDir := filepath.Join(base, "d")
+
 	mockScanner := &MockScanner{
 		scanFunc: func(sources []string, destRoot string) ([]*models.FileInfo, int64, int64, error) {
-			return []*models.FileInfo{{Name: "f.txt", SourcePath: "/s/f.txt", DestPath: "/d/f.txt", Size: 100}}, 1, 100, nil
+			return []*models.FileInfo{{Name: "f.txt", SourcePath: filepath.Join(srcDir, "f.txt"), DestPath: filepath.Join(dstDir, "f.txt"), Size: 100}}, 1, 100, nil
 		},
 	}
 
-	settings := NewSettingsServiceWithConfigPath("/tmp/settings.json")
+	settings := NewSettingsServiceWithConfigPath(filepath.Join(base, "tmp", "settings.json"))
 	s := NewTransferServiceWithDeps(core.NewTransferQueue(), mockCopier, mockScanner, afero.NewMemMapFs(), settings)
 
-	jobID, _ := s.AddTransfer([]string{"/s"}, "/d", false)
+	jobID, _ := s.AddTransfer([]string{srcDir}, dstDir, false)
 	s.StartQueue()
 
 	time.Sleep(50 * time.Millisecond) // Job should be in progress
@@ -252,16 +276,20 @@ func TestTransferService_Cancel(t *testing.T) {
 			return ctx.Err()
 		},
 	}
+	base, _ := filepath.Abs(".")
+	srcDir := filepath.Join(base, "s")
+	dstDir := filepath.Join(base, "d")
+
 	mockScanner := &MockScanner{
 		scanFunc: func(sources []string, destRoot string) ([]*models.FileInfo, int64, int64, error) {
-			return []*models.FileInfo{{Name: "f1", SourcePath: "/s/f1", DestPath: "/d/f1", Size: 10}}, 1, 10, nil
+			return []*models.FileInfo{{Name: "f1", SourcePath: filepath.Join(srcDir, "f1"), DestPath: filepath.Join(dstDir, "f1"), Size: 10}}, 1, 10, nil
 		},
 	}
 
-	settings := NewSettingsServiceWithConfigPath("/tmp/settings.json")
+	settings := NewSettingsServiceWithConfigPath(filepath.Join(base, "tmp", "settings.json"))
 	s := NewTransferServiceWithDeps(core.NewTransferQueue(), mockCopier, mockScanner, afero.NewMemMapFs(), settings)
 
-	jobID, _ := s.AddTransfer([]string{"/s"}, "/d", false)
+	jobID, _ := s.AddTransfer([]string{srcDir}, dstDir, false)
 	s.StartQueue()
 	time.Sleep(50 * time.Millisecond)
 
@@ -275,21 +303,28 @@ func TestTransferService_Cancel(t *testing.T) {
 }
 
 func TestTransferService_RemoveFileFromJob(t *testing.T) {
+	base, _ := filepath.Abs(".")
+	srcDir := filepath.Join(base, "s")
+	srcFile1 := filepath.Join(srcDir, "f1")
+	srcFile2 := filepath.Join(srcDir, "f2")
+
 	mockScanner := &MockScanner{
 		scanFunc: func(sources []string, destRoot string) ([]*models.FileInfo, int64, int64, error) {
 			return []*models.FileInfo{
-				{Name: "f1", SourcePath: "/s/f1", Size: 100},
-				{Name: "f2", SourcePath: "/s/f2", Size: 200},
+				{Name: "f1", SourcePath: srcFile1, Size: 100},
+				{Name: "f2", SourcePath: srcFile2, Size: 200},
 			}, 2, 300, nil
 		},
 	}
 
-	settings := NewSettingsServiceWithConfigPath("/tmp/settings.json")
+	dstDir := filepath.Join(base, "d")
+
+	settings := NewSettingsServiceWithConfigPath(filepath.Join(base, "tmp", "settings.json"))
 	s := NewTransferServiceWithDeps(core.NewTransferQueue(), &MockCopier{}, mockScanner, afero.NewMemMapFs(), settings)
 
-	jobID, _ := s.AddTransfer([]string{"/s"}, "/d", false)
+	jobID, _ := s.AddTransfer([]string{srcDir}, dstDir, false)
 	
-	s.RemoveFileFromJob(jobID, "/s/f1")
+	s.RemoveFileFromJob(jobID, srcFile1)
 	
 	job := s.GetQueue()[0]
 	if len(job.Files) != 1 {
