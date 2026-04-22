@@ -19,7 +19,7 @@ var assets embed.FS
 func main() {
 	// Setup flags
 	help := pflag.BoolP("help", "h", false, "Show this help message")
-	pflag.StringSliceP("transfer", "t", []string{}, "Folders to transfer in src:dst format (e.g. -t /src:/dst)")
+	pflag.StringArrayP("transfer", "t", []string{}, "Folders to transfer in src,dst format (e.g. -t src,dst)")
 	pflag.BoolP("overwrite", "o", false, "Overwrite existing files at destination")
 	pflag.BoolP("skip-end-check", "s", false, "Skip the extra hash check at the end of the transfer")
 	pflag.StringP("hash", "a", "", "Hash algorithm to use (xxhash, blake2b, sha256, md5). Default: xxhash")
@@ -40,7 +40,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		pflag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  certicopy -t /path/to/src:/path/to/dst --hash blake2b --buffer 4096\n")
+		fmt.Fprintf(os.Stderr, "  certicopy -t /path/to/src,/path/to/dst --hash blake2b --buffer 4096\n")
 		os.Exit(0)
 	}
 

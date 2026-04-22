@@ -7,6 +7,7 @@ import (
 	"github.com/jdrews/certicopy/internal/models"
 	"github.com/jdrews/certicopy/internal/services"
 	"github.com/spf13/afero"
+	"github.com/spf13/viper"
 )
 
 func TestApp_AddTransferToQueue(t *testing.T) {
@@ -130,5 +131,36 @@ func TestApp_RemoveFileFromJob(t *testing.T) {
 	}
 	if job.Files[0].SourcePath != "/src/file2.txt" {
 		t.Errorf("Expected /src/file2.txt to remain, got %s", job.Files[0].SourcePath)
+	}
+}
+
+func TestApp_ProcessCLITransfers(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	_ = afero.WriteFile(fs, "/src/file1.txt", []byte("hello"), 0644)
+
+	settings := services.NewSettingsServiceWithFs(fs, "/test/settings.json")
+	queue := core.NewTransferQueue()
+	copier := core.NewCopier(fs, fs)
+	scanner := core.NewScanner(fs)
+	ts := services.NewTransferServiceWithDeps(queue, copier, scanner, fs, settings)
+
+	app := &App{
+		transferService: ts,
+		settingsService: settings,
+	}
+
+	// Use viper to simulate CLI flags
+	viper.Set("transfer", []string{"/src/file1.txt,/dst/file1.txt"})
+	
+	app.processCLITransfers()
+	
+	queueItems := app.GetQueue()
+	if len(queueItems) != 1 {
+		t.Errorf("Expected 1 job from CLI, got %d", len(queueItems))
+	}
+	
+	job := queueItems[0]
+	if job.Destination != "/dst/file1.txt" {
+		t.Errorf("Expected destination /dst/file1.txt, got %s", job.Destination)
 	}
 }

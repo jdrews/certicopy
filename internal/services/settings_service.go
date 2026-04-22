@@ -26,10 +26,10 @@ func NewSettingsService() *SettingsService {
 	fs := afero.NewOsFs()
 
 	// Determine config path
-	home, err := os.UserHomeDir()
-	configPath := "settings.json" // Default to current dir if home fails
+	configDir, err := os.UserConfigDir()
+	configPath := "settings.json" // Default to current dir if config dir fails
 	if err == nil {
-		configDir := filepath.Join(home, ".config", "certicopy")
+		configDir = filepath.Join(configDir, "certicopy")
 		// Ensure directory exists
 		_ = fs.MkdirAll(configDir, 0755)
 		configPath = filepath.Join(configDir, "settings.json")

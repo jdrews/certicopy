@@ -8,7 +8,10 @@ on:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
@@ -27,6 +30,7 @@ jobs:
         run: npm ci
 
       - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -44,8 +48,13 @@ jobs:
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-      - name: Build Wails
+      - name: Build Wails (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: $(go env GOPATH)/bin/wails build -tags webkit2_41
+
+      - name: Build Wails (Windows)
+        if: matrix.os == 'windows-latest'
+        run: wails build
 
       - name: Build Frontend
         working-directory: frontend

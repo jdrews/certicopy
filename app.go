@@ -71,9 +71,9 @@ func (a *App) processCLITransfers() {
 	}
 
 	for _, t := range transfers {
-		parts := strings.Split(t, ":")
+		parts := strings.Split(t, ",")
 		if len(parts) != 2 {
-			core.Log.WithField("input", t).Error("Invalid transfer format. Expected src:dst")
+			core.Log.WithField("input", t).Error("Invalid transfer format. Expected src,dst")
 			continue
 		}
 		src, dst := parts[0], parts[1]

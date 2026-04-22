@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -85,6 +86,19 @@ func (s *TransferService) AddTransfer(sources []string, dest string, overwrite b
 		"sources": sources,
 		"dest":    dest,
 	}).Debug("AddTransfer request received")
+
+	// Normalize destination to absolute path
+	if absDest, err := filepath.Abs(dest); err == nil {
+		dest = absDest
+	}
+
+	// Normalize sources to absolute paths
+	for i, src := range sources {
+		if absSrc, err := filepath.Abs(src); err == nil {
+			sources[i] = absSrc
+		}
+	}
+
 	// Scan sources
 	files, _, totalSize, err := s.scanner.Scan(sources, dest)
 	if err != nil {

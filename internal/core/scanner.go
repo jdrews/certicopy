@@ -25,11 +25,22 @@ type ScanResult struct {
 	Size  int64
 }
 
-// Scan walks the source paths and returns a list of files to transfer, total size, and total count
 func (s *Scanner) Scan(sources []string, destRoot string) ([]*models.FileInfo, int64, int64, error) {
 	result := &ScanResult{}
 
+	// Normalize destination root to absolute path for Windows long path support
+	absDestRoot, err := filepath.Abs(destRoot)
+	if err == nil {
+		destRoot = absDestRoot
+	}
+
 	for _, source := range sources {
+		// Normalize source to absolute path
+		absSource, err := filepath.Abs(source)
+		if err == nil {
+			source = absSource
+		}
+
 		info, err := s.fs.Stat(source)
 		if err != nil {
 			return nil, 0, 0, err
