@@ -1,18 +1,23 @@
 package main
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/jdrews/certicopy/internal/core"
 	"github.com/jdrews/certicopy/internal/models"
 	"github.com/jdrews/certicopy/internal/services"
 	"github.com/spf13/afero"
+	"github.com/spf13/viper"
 )
 
 func TestApp_AddTransferToQueue(t *testing.T) {
 	fs := afero.NewMemMapFs()
+	base, _ := filepath.Abs(".")
 	// Setup test files
-	_ = afero.WriteFile(fs, "/src/file1.txt", []byte("hello"), 0644)
+	srcFile := filepath.Join(base, "src", "file1.txt")
+	dstDir := filepath.Join(base, "dst")
+	_ = afero.WriteFile(fs, srcFile, []byte("hello"), 0644)
 
 	settings := services.NewSettingsServiceWithFs(fs, "/test/settings.json")
 	queue := core.NewTransferQueue()
@@ -25,7 +30,7 @@ func TestApp_AddTransferToQueue(t *testing.T) {
 		settingsService: settings,
 	}
 
-	jobID, err := app.AddTransferToQueue([]string{"/src/file1.txt"}, "/dst", false)
+	jobID, err := app.AddTransferToQueue([]string{srcFile}, dstDir, false)
 	if err != nil {
 		t.Fatalf("Failed to add transfer: %v", err)
 	}
@@ -42,7 +47,10 @@ func TestApp_AddTransferToQueue(t *testing.T) {
 
 func TestApp_TransferActions(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	_ = afero.WriteFile(fs, "/src/file1.txt", []byte("hello"), 0644)
+	base, _ := filepath.Abs(".")
+	srcFile := filepath.Join(base, "src", "file1.txt")
+	dstDir := filepath.Join(base, "dst")
+	_ = afero.WriteFile(fs, srcFile, []byte("hello"), 0644)
 
 	settings := services.NewSettingsServiceWithFs(fs, "/test/settings.json")
 	queue := core.NewTransferQueue()
@@ -55,7 +63,7 @@ func TestApp_TransferActions(t *testing.T) {
 		settingsService: settings,
 	}
 
-	jobID, _ := app.AddTransferToQueue([]string{"/src/file1.txt"}, "/dst", false)
+	jobID, _ := app.AddTransferToQueue([]string{srcFile}, dstDir, false)
 
 	// Test Pause
 	app.PauseTransfer(jobID)
@@ -106,8 +114,12 @@ func TestApp_Settings(t *testing.T) {
 
 func TestApp_RemoveFileFromJob(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	_ = afero.WriteFile(fs, "/src/file1.txt", []byte("hello"), 0644)
-	_ = afero.WriteFile(fs, "/src/file2.txt", []byte("world"), 0644)
+	base, _ := filepath.Abs(".")
+	srcFile1 := filepath.Join(base, "src", "file1.txt")
+	srcFile2 := filepath.Join(base, "src", "file2.txt")
+	dstDir := filepath.Join(base, "dst")
+	_ = afero.WriteFile(fs, srcFile1, []byte("hello"), 0644)
+	_ = afero.WriteFile(fs, srcFile2, []byte("world"), 0644)
 
 	settings := services.NewSettingsServiceWithFs(fs, "/test/settings.json")
 	queue := core.NewTransferQueue()
@@ -120,15 +132,49 @@ func TestApp_RemoveFileFromJob(t *testing.T) {
 		settingsService: settings,
 	}
 
-	jobID, _ := app.AddTransferToQueue([]string{"/src/file1.txt", "/src/file2.txt"}, "/dst", false)
+	jobID, _ := app.AddTransferToQueue([]string{srcFile1, srcFile2}, dstDir, false)
 	
-	app.RemoveFileFromJob(jobID, "/src/file1.txt")
+	app.RemoveFileFromJob(jobID, srcFile1)
 	
 	job := app.GetQueue()[0]
 	if len(job.Files) != 1 {
 		t.Errorf("Expected 1 file remaining, got %d", len(job.Files))
 	}
-	if job.Files[0].SourcePath != "/src/file2.txt" {
-		t.Errorf("Expected /src/file2.txt to remain, got %s", job.Files[0].SourcePath)
+	if job.Files[0].SourcePath != srcFile2 {
+		t.Errorf("Expected %s to remain, got %s", srcFile2, job.Files[0].SourcePath)
+	}
+}
+
+func TestApp_ProcessCLITransfers(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	base, _ := filepath.Abs(".")
+	srcFile := filepath.Join(base, "src", "file1.txt")
+	dstFile := filepath.Join(base, "dst", "file1.txt")
+	_ = afero.WriteFile(fs, srcFile, []byte("hello"), 0644)
+
+	settings := services.NewSettingsServiceWithFs(fs, "/test/settings.json")
+	queue := core.NewTransferQueue()
+	copier := core.NewCopier(fs, fs)
+	scanner := core.NewScanner(fs)
+	ts := services.NewTransferServiceWithDeps(queue, copier, scanner, fs, settings)
+
+	app := &App{
+		transferService: ts,
+		settingsService: settings,
+	}
+
+	// Use viper to simulate CLI flags
+	viper.Set("transfer", []string{srcFile + "," + dstFile})
+	
+	app.processCLITransfers()
+	
+	queueItems := app.GetQueue()
+	if len(queueItems) != 1 {
+		t.Errorf("Expected 1 job from CLI, got %d", len(queueItems))
+	}
+	
+	job := queueItems[0]
+	if job.Destination != dstFile {
+		t.Errorf("Expected destination %s, got %s", dstFile, job.Destination)
 	}
 }
